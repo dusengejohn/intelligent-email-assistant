@@ -24,3 +24,11 @@ Guidance for Claude Code when working in this repository.
 - CI fails on lint errors, unformatted code, or a stale `uv.lock` — run
   `ruff check`, `ruff format` and `pytest` before committing.
 - Copy `.env.example` to `.env` for local config; never commit `.env`.
+
+## Automation
+- A PostToolUse hook (`.claude/hooks/ruff_after_edit.py`) auto-formats and lints
+  every backend `.py` file after you edit it. If it reports errors, fix them
+  before moving on.
+- Pre-commit (`.pre-commit-config.yaml`) runs lint, format, lockfile and test
+  checks on `git commit`. Never bypass it with `--no-verify` unless asked.
+- Custom commands live in `.claude/commands/`: `/new-endpoint`, `/explain`, `/check`.
