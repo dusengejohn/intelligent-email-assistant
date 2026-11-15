@@ -1,4 +1,5 @@
 """FastAPI entry point for the Intelligent Email Assistant."""
+
 from fastapi import FastAPI
 
 app = FastAPI(title="Intelligent Email Assistant")

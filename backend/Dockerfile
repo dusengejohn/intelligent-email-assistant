@@ -1,12 +1,19 @@
 FROM python:3.12-slim
 
-WORKDIR /app
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+# Bring in the uv binary from its official image
+COPY --from=ghcr.io/astral-sh/uv:0.13 /uv /uvx /bin/
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
+
+# Install dependencies first (cached unless pyproject.toml/uv.lock change)
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
 
+ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
