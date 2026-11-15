@@ -39,3 +39,15 @@ frontend/                  Vite app (served by nginx)
 docs/                      Documentation
 data/                      SQLite file (git-ignored)
 ```
+
+## Automation
+
+| What | When it runs | Config |
+|---|---|---|
+| Ruff format + lint on Claude's edits | Every time Claude Code edits a backend `.py` file | `.claude/settings.json`, `.claude/hooks/` |
+| Pre-commit checks (lint, format, lockfile, tests, secrets) | Every `git commit` | `.pre-commit-config.yaml` |
+| CI (same checks, on GitHub) | Every push to `main` / pull request | `.github/workflows/ci.yml` |
+
+One-time setup after cloning: `cd backend && uv sync && uv run pre-commit install`
+
+Claude Code slash commands: `/new-endpoint <description>`, `/explain <file or concept>`, `/check`.
