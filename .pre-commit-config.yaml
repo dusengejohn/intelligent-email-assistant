@@ -45,3 +45,10 @@ repos:
         language: system
         files: ^backend/
         pass_filenames: false
+
+      - id: eslint
+        name: eslint (frontend)
+        entry: npm --prefix frontend run lint
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: false

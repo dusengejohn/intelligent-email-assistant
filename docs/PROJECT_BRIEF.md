@@ -228,7 +228,8 @@ Sort order everywhere: Critical → High → Moderate → Low, then newest first
 - ✅ Frontend: React/Vite/TS scaffold; page shows backend health; Vite dev proxy `/api` → :8000
 - ✅ Frontend Dockerfile on `node:22-alpine` + `.dockerignore`; nginx keeps `/api` prefix + SPA fallback
 - ✅ Dev environment: WSL-native clone, uv and gh installed in WSL; brief imported into `CLAUDE.md`
-- ⏳ Tooling PR: VS Code recommended extensions, frontend lint in hooks, `.env.example`, `/story` + `/pr` commands
+- ✅ Tooling: VS Code recommended extensions + settings, `.editorconfig`, ESLint in Claude hook and
+  pre-commit, full `.env.example`, `/story` + `/pr` commands, README setup for WSL
 - ⏳ CI: add `frontend` and `docker` jobs, PR/issue templates, Dependabot; then protect `main`
 - ⏳ Docker Desktop WSL integration (daemon not reachable from WSL) → verify `docker compose up --build`
 
