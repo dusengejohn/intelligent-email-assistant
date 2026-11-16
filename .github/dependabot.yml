@@ -1,25 +1,50 @@
-# Dependabot opens PRs when dependencies have updates. Updates are grouped
-# per ecosystem so you get one weekly PR each instead of dozens.
+# Dependabot opens PRs when dependencies have updates.
+#
+# Policy:
+# - Minor + patch updates are grouped into one weekly PR per ecosystem (low risk).
+# - Major updates arrive as separate PRs, so one breaking change can't block the safe ones.
+# - Runtime versions (Python, Node, @types/node) change only on purpose, in their own
+#   story that updates Docker, CI and docs together — never through a bot PR.
 version: 2
 updates:
   - package-ecosystem: uv
     directory: /backend
     schedule: { interval: weekly }
     groups:
-      python: { patterns: ["*"] }
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
 
   - package-ecosystem: npm
     directory: /frontend
     schedule: { interval: weekly }
     groups:
-      npm: { patterns: ["*"] }
+      npm-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      # typescript-eslint 8.x only supports typescript <6.1. Remove this rule once a
+      # typescript-eslint release supports TypeScript 7 (check: npm view typescript-eslint peerDependencies)
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      # Types must match the Node major we run on (node:22 in frontend/Dockerfile and CI)
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
     groups:
-      actions: { patterns: ["*"] }
+      actions:
+        patterns: ["*"]
 
   - package-ecosystem: docker
     directories: [/backend, /frontend]
     schedule: { interval: weekly }
+    ignore:
+      # Stay on Python 3.12.x (matches backend/.python-version used by CI tests)
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # Stay on Node 22.x (matches CI's setup-node and @types/node)
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
