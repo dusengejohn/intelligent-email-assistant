@@ -1,0 +1,17 @@
+{
+  // VS Code shows "Install recommended extensions" when the repo is opened
+  "recommendations": [
+    "ms-vscode-remote.remote-wsl",
+    "anthropic.claude-code",
+    "ms-python.python",
+    "charliermarsh.ruff",
+    "tamasfe.even-better-toml",
+    "dbaeumer.vscode-eslint",
+    "bradlc.vscode-tailwindcss",
+    "ms-azuretools.vscode-containers",
+    "github.vscode-github-actions",
+    "github.vscode-pull-request-github",
+    "qwtel.sqlite-viewer",
+    "editorconfig.editorconfig"
+  ]
+}

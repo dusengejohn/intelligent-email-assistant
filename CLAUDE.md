@@ -4,7 +4,8 @@ Guidance for Claude Code when working in this repository.
 
 ## Layout
 - `backend/` — FastAPI app (`app/main.py`), tests in `backend/tests/`. Managed with **uv**.
-- `frontend/` — Vite app served by nginx in Docker; `/api/` is proxied to the backend.
+- `frontend/` — React + Vite + TypeScript app, served by nginx in Docker; `/api/` is
+  proxied to the backend (by Vite in dev, by nginx in Docker).
 - `data/` — SQLite database file (git-ignored).
 - `docs/` — project documentation.
 
@@ -16,6 +17,11 @@ Guidance for Claude Code when working in this repository.
 - Format: `uv run ruff format .`
 - Full stack (from repo root): `docker compose up --build`
 
+## Commands (run from `frontend/`)
+- Install deps: `npm install` (CI uses `npm ci`)
+- Dev server: `npm run dev` (http://localhost:5173, proxies `/api` → :8000)
+- Lint: `npm run lint` · Build (type-check + bundle): `npm run build`
+
 ## Conventions
 - Never use pip or edit requirements files — they don't exist. Add deps with
   `uv add <pkg>` (runtime) or `uv add --dev <pkg>` (test/lint tools).
@@ -26,12 +32,14 @@ Guidance for Claude Code when working in this repository.
 - Copy `.env.example` to `.env` for local config; never commit `.env`.
 
 ## Automation
-- A PostToolUse hook (`.claude/hooks/ruff_after_edit.py`) auto-formats and lints
-  every backend `.py` file after you edit it. If it reports errors, fix them
-  before moving on.
+- PostToolUse hooks auto-fix every file you edit: `ruff_after_edit.py` (backend
+  `.py`) and `eslint_after_edit.py` (frontend `.ts/.tsx`). If they report errors,
+  fix them before moving on.
 - Pre-commit (`.pre-commit-config.yaml`) runs lint, format, lockfile and test
   checks on `git commit`. Never bypass it with `--no-verify` unless asked.
-- Custom commands live in `.claude/commands/`: `/new-endpoint`, `/explain`, `/check`.
+- Custom commands live in `.claude/commands/`: `/story <issue>`, `/new-endpoint`,
+  `/explain`, `/check`, `/pr <issue>`.
+- GitHub work goes through the `gh` CLI (issues, PRs, CI status).
 
 ## Project brief
 Requirements, architecture, working agreement and Definition of Done:

@@ -9,6 +9,12 @@
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/ruff_after_edit.py\"",
             "timeout": 60,
             "statusMessage": "ruff: formatting + linting"
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/eslint_after_edit.py\"",
+            "timeout": 60,
+            "statusMessage": "eslint: fixing + linting"
           }
         ]
       }
