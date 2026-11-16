@@ -231,8 +231,9 @@ Sort order everywhere: Critical → High → Moderate → Low, then newest first
 - ✅ Tooling: VS Code recommended extensions + settings, `.editorconfig`, ESLint in Claude hook and
   pre-commit, full `.env.example`, `/story` + `/pr` commands, README setup for WSL
 - ✅ CI: `backend`, `frontend` and `docker` jobs; PR/issue templates; Dependabot
-- ⏳ Protect `main`: PR required + the three CI checks green
-- ⏳ Docker Desktop WSL integration (daemon not reachable from WSL) → verify `docker compose up --build`
+- ✅ `main` protected: PR required + `backend`, `frontend`, `docker` checks green
+- ✅ Docker Desktop WSL integration; `docker compose up --build` verified (frontend :8080, backend :8000);
+  backend healthcheck, frontend starts only once the API is healthy
 
 ## 13. Roadmap
 

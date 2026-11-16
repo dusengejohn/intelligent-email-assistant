@@ -8,10 +8,20 @@ services:
       - ./data:/app/data
     ports:
       - "8000:8000"
+    # Docker polls this to know when the API is actually ready, not just started.
+    # Uses Python (already in the image) because python:3.12-slim has no curl.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+      start_interval: 1s
 
   frontend:
     build: ./frontend
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy   # wait for a passing healthcheck, not just a running container
     ports:
       - "8080:80"
