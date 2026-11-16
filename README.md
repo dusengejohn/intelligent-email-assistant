@@ -67,3 +67,5 @@ Claude Code slash commands: `/story <issue>`, `/new-endpoint <description>`,
 `/explain <file or concept>`, `/check`, `/pr <issue>`.
 
 Project requirements and working agreement: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md).
+How the frontend reaches the backend, and how the healthcheck works:
+[docs/REQUEST_FLOW.md](docs/REQUEST_FLOW.md).
