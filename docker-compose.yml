@@ -1,7 +1,9 @@
 services:
   backend:
     build: ./backend
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false   # CI and fresh clones have no .env
     volumes:
       - ./data:/app/data
     ports:
