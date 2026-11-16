@@ -44,7 +44,7 @@ Commit both `pyproject.toml` and `uv.lock`.
 ## Structure
 
 ```
-.github/workflows/ci.yml   CI: lint, format check, tests
+.github/                   CI (backend, frontend, docker jobs), Dependabot, PR/issue templates
 backend/                   FastAPI app + tests (pyproject.toml, uv.lock)
 frontend/                  Vite app (served by nginx)
 docs/                      Documentation
