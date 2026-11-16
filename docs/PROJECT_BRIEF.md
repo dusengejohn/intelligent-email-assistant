@@ -206,6 +206,9 @@ Sort order everywhere: Critical → High → Moderate → Low, then newest first
   fail without breaking the app.
 - Logging with Python `logging` (no secrets in logs).
 - Reproducible builds: `uv.lock` + `package-lock.json` committed; CI uses `--locked` / `npm ci`.
+- Runtime versions (Python 3.12, Node 22, matching `@types/node`) change only on purpose, in a
+  dedicated story that updates Docker, CI and docs together. Dependabot groups minor/patch
+  updates and sends majors separately (policy in `.github/dependabot.yml`).
 - Containers: small images, dependency layers cached, no dev tools in production images.
 
 ## 11. Definition of Done (every story)
