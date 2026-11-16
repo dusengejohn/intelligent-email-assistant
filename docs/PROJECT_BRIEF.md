@@ -221,17 +221,16 @@ Sort order everywhere: Critical → High → Moderate → Low, then newest first
 ## 12. Current status (2026-11-15)
 
 - ✅ Repo structure, README, CLAUDE.md, `.gitignore`, `.env.example`, `.gitattributes`
-- ✅ Backend: FastAPI health endpoint + test; uv/pyproject/uv.lock; ruff config
+- ✅ Backend: `GET /api/health` (under `APIRouter(prefix="/api")`) + test; uv/pyproject/uv.lock; ruff config
 - ✅ Automation: Claude Code PostToolUse ruff hook, slash commands (`/new-endpoint`,
   `/explain`, `/check`), pre-commit (lint, format, lock check, pytest, secret detection)
-- ✅ Backend Dockerfile (uv), frontend Dockerfile + nginx.conf, docker-compose, backend CI job
-- ⏳ Branch `chore/dev-automation` → push + PR + merge
-- ⏳ Move health route under `/api`; nginx `proxy_pass` without trailing slash
-- ⏳ Create React/Vite/TS frontend (none exists yet → compose build currently fails)
-- ⏳ Frontend Dockerfile: Node 20 → 22
-- ⏳ CI: add `frontend` and `docker` jobs; protect `main`
-- ⏳ Dev environment: work from a WSL-native clone (`~/projects/...`), not `/mnt/c`
-  (the existing `backend/.venv` was created by Windows uv)
+- ✅ Backend Dockerfile (uv), docker-compose, backend CI job
+- ✅ Frontend: React/Vite/TS scaffold; page shows backend health; Vite dev proxy `/api` → :8000
+- ✅ Frontend Dockerfile on `node:22-alpine` + `.dockerignore`; nginx keeps `/api` prefix + SPA fallback
+- ✅ Dev environment: WSL-native clone, uv and gh installed in WSL; brief imported into `CLAUDE.md`
+- ⏳ Tooling PR: VS Code recommended extensions, frontend lint in hooks, `.env.example`, `/story` + `/pr` commands
+- ⏳ CI: add `frontend` and `docker` jobs, PR/issue templates, Dependabot; then protect `main`
+- ⏳ Docker Desktop WSL integration (daemon not reachable from WSL) → verify `docker compose up --build`
 
 ## 13. Roadmap
 

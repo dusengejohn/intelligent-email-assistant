@@ -32,3 +32,7 @@ Guidance for Claude Code when working in this repository.
 - Pre-commit (`.pre-commit-config.yaml`) runs lint, format, lockfile and test
   checks on `git commit`. Never bypass it with `--no-verify` unless asked.
 - Custom commands live in `.claude/commands/`: `/new-endpoint`, `/explain`, `/check`.
+
+## Project brief
+Requirements, architecture, working agreement and Definition of Done:
+@docs/PROJECT_BRIEF.md
