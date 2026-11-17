@@ -58,5 +58,5 @@ def generate_emails(ai: AIClient, count: int, scenario: str | None = None) -> li
         count,
     )
     if not emails:
-        raise AIServiceError("AI returned no valid emails; try again.")
+        raise AIServiceError("no valid emails were generated; try again.")
     return emails[:count]

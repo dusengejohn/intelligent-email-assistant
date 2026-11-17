@@ -34,7 +34,7 @@ class AIClient:
         self.model = settings.anthropic_model
         if sdk_client is None:
             if settings.anthropic_api_key is None:
-                raise AIConfigError("AI is not configured: set ANTHROPIC_API_KEY.")
+                raise AIConfigError("AI is not configured: set ANTHROPIC_API_KEY in .env")
             sdk_client = anthropic.Anthropic(
                 api_key=settings.anthropic_api_key.get_secret_value(),
                 timeout=settings.ai_timeout_seconds,
@@ -61,23 +61,21 @@ class AIClient:
         # original error attached for debugging; users only see our short message.
         except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as exc:
             raise self._fail(
-                AIConfigError, "AI is not configured: the API key was rejected.", exc
+                AIConfigError, "AI is not configured: ANTHROPIC_API_KEY was rejected", exc
             ) from exc
         except anthropic.RateLimitError as exc:
-            raise self._fail(
-                AIServiceError, "AI service is busy (rate limited); try again.", exc
-            ) from exc
+            raise self._fail(AIServiceError, "busy (rate limited); try again.", exc) from exc
         except anthropic.APITimeoutError as exc:
-            raise self._fail(AIServiceError, "AI request timed out; try again.", exc) from exc
+            raise self._fail(AIServiceError, "request timed out; try again.", exc) from exc
         except anthropic.APIConnectionError as exc:
-            raise self._fail(AIServiceError, "Could not reach the AI service.", exc) from exc
+            raise self._fail(AIServiceError, "could not reach the AI service.", exc) from exc
         except anthropic.APIStatusError as exc:
             raise self._fail(
-                AIServiceError, f"AI service error (HTTP {exc.status_code}).", exc
+                AIServiceError, f"unexpected response (HTTP {exc.status_code}).", exc
             ) from exc
         except ValidationError as exc:
             # The SDK validates inside parse(): cut-off or non-JSON output lands here
-            raise self._fail(AIServiceError, "AI returned invalid output.", exc) from exc
+            raise self._fail(AIServiceError, "returned invalid output.", exc) from exc
 
         duration_ms = (time.perf_counter() - started) * 1000
         usage = response.usage
@@ -94,11 +92,11 @@ class AIClient:
 
         # Only trust output from a normal finish
         if response.stop_reason == "refusal":
-            raise AIServiceError("AI declined the request (refusal).")
+            raise AIServiceError("declined the request (refusal).")
         if response.stop_reason == "max_tokens":
-            raise AIServiceError("AI output was cut off (max tokens reached).")
+            raise AIServiceError("output was cut off (max tokens reached).")
         if response.parsed_output is None:
-            raise AIServiceError("AI returned no structured output.")
+            raise AIServiceError("returned no structured output.")
         return response.parsed_output
 
     def _fail[E: Exception](self, error_type: type[E], message: str, cause: Exception) -> E:
