@@ -88,8 +88,9 @@ backend/tests/       # mirrors services/ and routers/
 |---|---|---|
 | `APP_ENV` | `development` | |
 | `DATABASE_URL` | `sqlite:///./data/app.db` | |
-| `ANTHROPIC_API_KEY` | *(secret)* | Optional at startup; AI features return a clear error / fallback if missing |
-| `ANTHROPIC_MODEL` | a current Haiku-class model | Cheap + fast is enough; verify current model names in Anthropic docs |
+| `ANTHROPIC_API_KEY` | *(secret)* | Optional at startup; empty = not configured; AI features return a clear error / fallback if missing |
+| `ANTHROPIC_MODEL` | `claude-haiku-5-5` | Cheap + fast is enough; verify current model names in Anthropic docs |
+| `AI_TIMEOUT_SECONDS` | `30` | Max seconds per Claude API call |
 | `APP_TIMEZONE` | `America/Toronto` | Used by calendar planning |
 | `WORK_HOURS` | `09:00-17:00` | Working window for suggestions |
 | `WEATHER_CITY` | `Toronto` | |
