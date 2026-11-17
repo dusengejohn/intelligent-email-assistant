@@ -59,3 +59,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: docker compose build
+      - name: Backend container must not run as root
+        run: |
+          uid="$(docker compose run --rm --no-deps -T backend id -u)"
+          echo "backend runs as UID $uid"
+          test "$uid" != "0"

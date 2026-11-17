@@ -210,7 +210,8 @@ Sort order everywhere: Critical → High → Moderate → Low, then newest first
 - Runtime versions (Python 3.12, Node 22, matching `@types/node`) change only on purpose, in a
   dedicated story that updates Docker, CI and docs together. Dependabot groups minor/patch
   updates and sends majors separately (policy in `.github/dependabot.yml`).
-- Containers: small images, dependency layers cached, no dev tools in production images.
+- Containers: small images, dependency layers cached, no dev tools in production images,
+  run as a non-root user (backend UID 1000; CI fails if it runs as root).
 
 ## 11. Definition of Done (every story)
 
@@ -238,6 +239,7 @@ Sort order everywhere: Critical → High → Moderate → Low, then newest first
 - ✅ `main` protected: PR required + `backend`, `frontend`, `docker` checks green
 - ✅ Docker Desktop WSL integration; `docker compose up --build` verified (frontend :8080, backend :8000);
   backend healthcheck, frontend starts only once the API is healthy
+- ✅ Backend container runs as non-root (UID 1000), enforced in CI (#38)
 
 ## 13. Roadmap
 

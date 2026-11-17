@@ -41,6 +41,22 @@ uv remove <package>
 
 Commit both `pyproject.toml` and `uv.lock`.
 
+## Docker and the `data/` folder
+
+The SQLite database lives in `data/app.db`, shared by local runs and Docker
+(`./data` is bind-mounted into the backend container at `/app/data`).
+
+- The backend container runs as a **non-root user with UID 1000**, the default
+  WSL/Linux user, so files it creates in `data/` are owned by you.
+- If your user ID isn't 1000 (`id -u`), build with
+  `docker compose build --build-arg UID=$(id -u) --build-arg GID=$(id -g)`.
+- `data/` must exist before `docker compose up` (it does: `data/.gitkeep` is
+  committed). Otherwise Docker creates it as root and the app can't write to it.
+- **One-time fix** if `data/app.db` was created by an older, root-run container
+  (`ls -l data` shows `root`) and local runs fail with *"attempt to write a
+  readonly database"*: `rm data/app.db` (the app recreates it; development data
+  is lost) or keep the data with `sudo chown $USER:$USER data/app.db`.
+
 ## Structure
 
 ```
