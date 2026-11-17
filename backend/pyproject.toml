@@ -31,3 +31,8 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+# `app` is our own code; without this, imports of modules that don't exist yet
+# (e.g. written test-first) get sorted as third-party.
+known-first-party = ["app"]

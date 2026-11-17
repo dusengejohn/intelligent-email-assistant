@@ -11,11 +11,11 @@ from typing import Any
 import anthropic
 import httpx2
 import pytest
-from app.services.ai_client import AIClient, get_ai_client
-from app.services.errors import AIConfigError, AIServiceError
 from pydantic import BaseModel, ValidationError
 
 from app.config import Settings
+from app.services.ai_client import AIClient, get_ai_client
+from app.services.errors import AIConfigError, AIServiceError
 
 API_KEY = "sk-ant-test-key-never-logged"
 REQUEST = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
