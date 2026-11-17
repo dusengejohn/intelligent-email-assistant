@@ -11,10 +11,13 @@ from pathlib import Path
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Resolved from this file's location, not the current directory, so the
-# repo-root .env is found even when uvicorn runs from backend/.
-# (In Docker this points at /.env, which doesn't exist and is simply skipped.)
-ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+# Paths are resolved from this file's location, not the current directory, so
+# the repo-root .env and data/ are found even when uvicorn runs from backend/.
+# (In Docker REPO_ROOT is `/`: there is no /.env, so it is simply skipped, and
+# docker-compose.yml sets DATABASE_URL to the file inside the data volume.)
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ENV_FILE = REPO_ROOT / ".env"
+DEFAULT_DATABASE_URL = f"sqlite:///{(REPO_ROOT / 'data' / 'app.db').as_posix()}"
 
 
 class Settings(BaseSettings):
@@ -22,7 +25,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file_encoding="utf-8", extra="ignore")
 
     app_env: str = "development"
-    database_url: str = "sqlite:///./data/app.db"  # path is fixed in story 1.2
+    database_url: str = DEFAULT_DATABASE_URL
 
     # Optional: the app must start without it. SecretStr prints as '**********'.
     anthropic_api_key: SecretStr | None = None

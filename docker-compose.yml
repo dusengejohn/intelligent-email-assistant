@@ -4,6 +4,10 @@ services:
     env_file:
       - path: .env
         required: false   # CI and fresh clones have no .env
+    environment:
+      # Absolute path (4 slashes) inside the volume below, so the database
+      # survives container restarts. Overrides any DATABASE_URL in .env.
+      DATABASE_URL: sqlite:////app/data/app.db
     volumes:
       - ./data:/app/data
     ports:
