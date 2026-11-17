@@ -12,6 +12,8 @@ from typing import Self
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.models import ClassificationSource, EmailStatus, Priority
+
 # Domains reserved for documentation (RFC 2606): guaranteed never to be real
 # mailboxes. Generated senders must use one of these (or a subdomain).
 FICTIONAL_DOMAINS = ("example.com", "example.org", "example.net")
@@ -82,3 +84,36 @@ class GeneratedEmail(BaseModel):
                 "received_at": now - timedelta(minutes=raw.received_minutes_ago),
             }
         )
+
+
+# --- API request / response models ------------------------------------------
+
+
+class GenerateRequest(BaseModel):
+    """Body of POST /api/emails/generate."""
+
+    count: int = Field(default=10, ge=1, le=50, description="How many emails to generate")
+    scenario: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Optional context, e.g. 'IT infrastructure team'",
+    )
+
+
+class EmailRead(BaseModel):
+    """An email as returned by the API (all fields; timestamps are UTC-aware)."""
+
+    model_config = ConfigDict(from_attributes=True)  # build directly from an Email row
+
+    id: int
+    sender_name: str
+    sender_email: str
+    subject: str
+    body: str
+    received_at: datetime
+    priority: Priority | None
+    priority_reason: str | None
+    classification_source: ClassificationSource | None
+    suggested_response_minutes: int | None
+    status: EmailStatus
+    created_at: datetime

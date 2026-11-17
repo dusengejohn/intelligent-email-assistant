@@ -1,47 +1,14 @@
-"""Tests for the email generator (story 1.4, issue #30).
-
-`FakeAI` stands in for `AIClient`: same `parse(...)` method, no network. It
-returns prepared batches in order and records every prompt it was sent.
-"""
+"""Tests for the email generator (story 1.4, issue #30). Fakes: tests/fakes.py."""
 
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 import pytest
 
-from app.schemas import GeneratedBatch, GeneratedEmail, RawEmail
+from app.schemas import GeneratedBatch, GeneratedEmail
 from app.services.errors import AIServiceError
 from app.services.generator import generate_emails
-
-
-def raw(n: int, **overrides: Any) -> RawEmail:
-    values: dict[str, Any] = {
-        "sender_name": f"Sender {n}",
-        "sender_email": f"sender{n}@example.com",
-        "subject": f"Subject {n}",
-        "body": f"Body of email {n}. SECRET-BODY-TEXT",
-        "received_minutes_ago": n * 60,
-    }
-    values.update(overrides)
-    return RawEmail(**values)
-
-
-def batch(size: int, start: int = 0) -> GeneratedBatch:
-    return GeneratedBatch(emails=[raw(start + i) for i in range(size)])
-
-
-class FakeAI:
-    def __init__(self, *results: GeneratedBatch | Exception) -> None:
-        self._results = list(results)
-        self.calls: list[dict[str, Any]] = []
-
-    def parse(self, **kwargs: Any) -> GeneratedBatch:
-        self.calls.append(kwargs)
-        result = self._results.pop(0)
-        if isinstance(result, Exception):
-            raise result
-        return result
+from tests.fakes import FakeAI, batch, raw
 
 
 def generate(ai: FakeAI, count: int, scenario: str | None = None) -> list[GeneratedEmail]:
