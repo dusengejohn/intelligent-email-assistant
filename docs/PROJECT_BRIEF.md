@@ -87,7 +87,7 @@ backend/tests/       # mirrors services/ and routers/
 | Variable | Example | Notes |
 |---|---|---|
 | `APP_ENV` | `development` | |
-| `DATABASE_URL` | `sqlite:///./data/app.db` | |
+| `DATABASE_URL` | `sqlite:////abs/path/app.db` | Optional; default is repo-root `data/app.db`. Docker sets `sqlite:////app/data/app.db` |
 | `ANTHROPIC_API_KEY` | *(secret)* | Optional at startup; empty = not configured; AI features return a clear error / fallback if missing |
 | `ANTHROPIC_MODEL` | `claude-haiku-5-5` | Cheap + fast is enough; verify current model names in Anthropic docs |
 | `AI_TIMEOUT_SECONDS` | `30` | Max seconds per Claude API call |

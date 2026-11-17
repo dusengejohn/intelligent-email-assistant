@@ -19,6 +19,9 @@ frontend/dist/
 # Data (SQLite lives here)
 data/*
 !data/.gitkeep
+# Safety net: never commit a database file created somewhere else by mistake
+*.db
+*.sqlite
 
 # OS / editor
 .DS_Store
