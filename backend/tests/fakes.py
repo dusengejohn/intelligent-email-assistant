@@ -7,6 +7,8 @@ records every call, so tests can assert on the prompts that were sent.
 
 from typing import Any
 
+from pydantic import BaseModel
+
 from app.schemas import GeneratedBatch, RawEmail
 
 
@@ -29,11 +31,11 @@ def batch(size: int, start: int = 0) -> GeneratedBatch:
 
 
 class FakeAI:
-    def __init__(self, *results: GeneratedBatch | Exception) -> None:
+    def __init__(self, *results: BaseModel | Exception) -> None:
         self._results = list(results)
         self.calls: list[dict[str, Any]] = []
 
-    def parse(self, **kwargs: Any) -> GeneratedBatch:
+    def parse(self, **kwargs: Any) -> Any:
         self.calls.append(kwargs)
         result = self._results.pop(0)
         if isinstance(result, Exception):
