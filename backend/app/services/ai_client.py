@@ -108,3 +108,16 @@ class AIClient:
 def get_ai_client(settings: Annotated[Settings, Depends(get_settings)]) -> AIClient:
     """FastAPI dependency. Raises AIConfigError when no API key is configured."""
     return AIClient(settings)
+
+
+def get_optional_ai_client(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> AIClient | None:
+    """FastAPI dependency for features WITH a fallback (e.g. classification).
+
+    Returns None instead of raising when no API key is configured, so the
+    endpoint can degrade gracefully (rules) rather than answer 503.
+    """
+    if settings.anthropic_api_key is None:
+        return None
+    return AIClient(settings)

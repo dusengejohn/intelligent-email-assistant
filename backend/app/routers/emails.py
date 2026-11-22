@@ -3,18 +3,32 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlmodel import Session, col, select
+from sqlmodel import Session, col, func, select
 
 from app.db import get_session
-from app.models import Email, EmailStatus, Priority
-from app.schemas import EmailRead, GenerateRequest
-from app.services.ai_client import AIClient, get_ai_client
+from app.models import ClassificationSource, Email, EmailStatus, Priority
+from app.schemas import (
+    Classification,
+    ClassifyResult,
+    EmailRead,
+    GenerateRequest,
+    SourceCounts,
+)
+from app.services.ai_client import AIClient, get_ai_client, get_optional_ai_client
+from app.services.classifier import classify_emails
 from app.services.generator import generate_emails
 
 router = APIRouter(prefix="/emails", tags=["emails"])
 
 SessionDep = Annotated[Session, Depends(get_session)]
 AIDep = Annotated[AIClient, Depends(get_ai_client)]
+# Classification has a fallback, so a missing key means "use the rules", not 503
+OptionalAIDep = Annotated[AIClient | None, Depends(get_optional_ai_client)]
+
+# At most this many emails per classify request (3 AI batches, ~20 s): keeps
+# every request far below nginx's 180 s timeout. The client calls again while
+# `remaining` > 0.
+CLASSIFY_LIMIT = 50
 
 
 # A plain `def` (not `async def`): the Claude call blocks for several seconds,
@@ -72,4 +86,72 @@ def get_email(email_id: int, session: SessionDep) -> Email:
     email = session.get(Email, email_id)
     if email is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
+    return email
+
+
+def _apply(email: Email, classification: Classification) -> None:
+    email.priority = classification.priority
+    email.priority_reason = classification.reason
+    email.suggested_response_minutes = classification.suggested_response_minutes
+    email.classification_source = classification.source
+
+
+def _unclassified_count(session: Session) -> int:
+    query = select(func.count()).select_from(Email).where(col(Email.priority).is_(None))
+    return session.exec(query).one()
+
+
+@router.post(
+    "/classify",
+    response_model=ClassifyResult,
+    summary="Classify unclassified emails (newest first, up to 50 per request)",
+)
+def classify_unclassified(session: SessionDep, ai: OptionalAIDep) -> ClassifyResult:
+    # Only emails without a priority: AI, fallback and manual results are never
+    # overwritten. Two simultaneous calls could classify the same emails twice;
+    # harmless (last save wins) for a single-user app.
+    query = (
+        select(Email)
+        .where(col(Email.priority).is_(None))
+        .order_by(col(Email.received_at).desc(), col(Email.id).desc())
+        .limit(CLASSIFY_LIMIT)
+    )
+    emails = list(session.exec(query))
+    results = classify_emails(emails, ai) if emails else {}
+
+    for email in emails:
+        _apply(email, results[email.id])  # type: ignore[index]
+    session.add_all(emails)
+    session.commit()  # one transaction for the whole request
+    for email in emails:
+        session.refresh(email)
+
+    sources = [c.source for c in results.values()]
+    return ClassifyResult(
+        classified=len(emails),
+        by_source=SourceCounts(
+            ai=sources.count(ClassificationSource.AI),
+            fallback=sources.count(ClassificationSource.FALLBACK),
+        ),
+        remaining=_unclassified_count(session),
+        emails=[EmailRead.model_validate(email) for email in emails],
+    )
+
+
+@router.post(
+    "/{email_id}/classify",
+    response_model=EmailRead,
+    summary="Classify (or re-classify) one email",
+    responses={404: {"description": "Email not found"}},
+)
+def classify_one(email_id: int, session: SessionDep, ai: OptionalAIDep) -> Email:
+    # Explicit request for one email: re-classify even if it already has a
+    # priority (including a manual one)
+    email = session.get(Email, email_id)
+    if email is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
+    _apply(email, classify_emails([email], ai)[email_id])
+    session.add(email)
+    session.commit()
+    session.refresh(email)
     return email
