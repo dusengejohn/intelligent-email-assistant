@@ -2,11 +2,11 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
-from sqlmodel import Session
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlmodel import Session, col, select
 
 from app.db import get_session
-from app.models import Email
+from app.models import Email, EmailStatus, Priority
 from app.schemas import EmailRead, GenerateRequest
 from app.services.ai_client import AIClient, get_ai_client
 from app.services.generator import generate_emails
@@ -40,3 +40,36 @@ def generate(request: GenerateRequest, session: SessionDep, ai: AIDep) -> list[E
     for email in emails:
         session.refresh(email)  # load the database-assigned id and defaults
     return emails
+
+
+@router.get("", response_model=list[EmailRead], summary="List emails, newest first")
+def list_emails(
+    session: SessionDep,
+    # `alias`: the URL still says ?status=..., but the Python name doesn't hide
+    # FastAPI's `status` module imported above
+    email_status: Annotated[EmailStatus | None, Query(alias="status")] = None,
+    priority: Priority | None = None,
+) -> list[Email]:
+    # Typed as enums: FastAPI rejects unknown values with 422 and lists the
+    # allowed ones in /docs. Filters are added only when given.
+    query = select(Email)
+    if email_status is not None:
+        query = query.where(Email.status == email_status)
+    if priority is not None:
+        query = query.where(Email.priority == priority)
+    # id breaks ties, so emails with the same received_at never swap places
+    query = query.order_by(col(Email.received_at).desc(), col(Email.id).desc())
+    return list(session.exec(query))
+
+
+@router.get(
+    "/{email_id}",
+    response_model=EmailRead,
+    summary="Get one email",
+    responses={404: {"description": "Email not found"}},
+)
+def get_email(email_id: int, session: SessionDep) -> Email:
+    email = session.get(Email, email_id)
+    if email is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
+    return email
