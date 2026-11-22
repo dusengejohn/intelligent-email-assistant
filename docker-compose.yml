@@ -1,6 +1,10 @@
+# restart: unless-stopped -> Docker starts the containers again whenever Docker
+# Desktop starts (e.g. after a reboot), unless you stopped them yourself
+# (`docker compose stop` / `down`).
 services:
   backend:
     build: ./backend
+    restart: unless-stopped
     env_file:
       - path: .env
         required: false   # CI and fresh clones have no .env
@@ -24,6 +28,7 @@ services:
 
   frontend:
     build: ./frontend
+    restart: unless-stopped
     depends_on:
       backend:
         condition: service_healthy   # wait for a passing healthcheck, not just a running container

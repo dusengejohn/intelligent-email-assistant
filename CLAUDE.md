@@ -3,11 +3,18 @@
 Guidance for Claude Code when working in this repository.
 
 ## Layout
-- `backend/` — FastAPI app (`app/main.py`), tests in `backend/tests/`. Managed with **uv**.
-- `frontend/` — React + Vite + TypeScript app, served by nginx in Docker; `/api/` is
-  proxied to the backend (by Vite in dev, by nginx in Docker).
+- `backend/` — FastAPI app, managed with **uv**:
+  - `app/main.py` (app, routers under `/api`, error handlers, logging), `config.py`,
+    `db.py`, `models.py` (tables), `schemas.py` (API + AI shapes);
+  - `app/routers/` — endpoints (`health.py`, `emails.py`);
+  - `app/services/` — `ai_client.py` (the only Claude caller), `prompts.py`,
+    `generator.py`, `errors.py`;
+  - `tests/` mirrors `app/`; `tests/fakes.py` holds the shared `FakeAI`.
+- `frontend/` — React + Vite + TypeScript + Tailwind, served by nginx in Docker; `/api/` is
+  proxied to the backend (by Vite in dev, by nginx in Docker). `src/api.ts` is the typed
+  API client (Vitest: `src/api.test.ts`); UI pieces live in `src/components/`.
 - `data/` — SQLite database file (git-ignored).
-- `docs/` — project documentation.
+- `docs/` — project documentation; manual end-to-end checklists in `docs/testing/`.
 
 ## Commands (run from `backend/`)
 - Install / sync deps: `uv sync`

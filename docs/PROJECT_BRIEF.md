@@ -2,7 +2,7 @@
 
 > **Purpose of this file:** the single source of truth for *what* this project must do,
 > *why*, and *how* it is built. Claude Code: read this before planning any work.
-> Owner: John Dusenge · Repo: `dusengejohn/intelligent-email-assistant` · Last updated: 2026-11-15
+> Owner: John Dusenge · Repo: `dusengejohn/intelligent-email-assistant` · Last updated: 2026-11-21
 
 ---
 
@@ -131,7 +131,7 @@ Sort order everywhere: Critical → High → Moderate → Low, then newest first
 
 ## 8. Functional requirements by epic
 
-### Epic 0 — Project setup & DevOps foundation (in progress)
+### Epic 0 — Project setup & DevOps foundation (done)
 - Monorepo: `backend/`, `frontend/`, `docs/`, `data/`, `.github/workflows/`.
 - `GET /api/health` → `{"status":"ok"}` with a test.
 - React page shows backend health; `docker compose up --build` runs both services.
@@ -139,7 +139,7 @@ Sort order everywhere: Critical → High → Moderate → Low, then newest first
   `frontend` (npm ci, lint, build), `docker` (compose build; needs the other two).
 - `main` protected: PR required + all three checks green.
 
-### Epic 1 — Email generation (AI)
+### Epic 1 — Email generation (AI) (done)
 - `POST /api/emails/generate` body `{ "count": 1..50, "scenario"?: str }`.
 - Backend asks Claude for a **JSON array** of realistic workplace emails covering a mix
   of priorities (sender_name, sender_email, subject, body, received_at within last 48 h).
@@ -223,7 +223,7 @@ Sort order everywhere: Critical → High → Moderate → Low, then newest first
 6. README / CLAUDE.md / this brief updated if behaviour, commands or decisions changed.
 7. I (John) have read and understood the code.
 
-## 12. Current status (2026-11-15)
+## 12. Current status (2026-11-21)
 
 - ✅ Repo structure, README, CLAUDE.md, `.gitignore`, `.env.example`, `.gitattributes`
 - ✅ Backend: `GET /api/health` (under `APIRouter(prefix="/api")`) + test; uv/pyproject/uv.lock; ruff config
@@ -240,6 +240,21 @@ Sort order everywhere: Critical → High → Moderate → Low, then newest first
 - ✅ Docker Desktop WSL integration; `docker compose up --build` verified (frontend :8080, backend :8000);
   backend healthcheck, frontend starts only once the API is healthy
 - ✅ Backend container runs as non-root (UID 1000), enforced in CI (#38)
+
+**Epic 1 — Email generation: done** (#27–#34, test log: `docs/testing/epic-1.md`)
+- ✅ Settings from env/`.env` (`SecretStr` key, model, timeout) (#27)
+- ✅ SQLite + `Email` model, UTC-aware timestamps, repo-root `data/app.db` (#28)
+- ✅ Claude client: structured outputs, error mapping, token logging (#29)
+- ✅ Generator: batches of 10, two-layer validation, fictional domains, code-made timestamps (#30)
+- ✅ `POST /api/emails/generate` (201/422/502/503), `GET /api/emails`, `GET /api/emails/{id}` (#31, #32)
+- ✅ React UI with Tailwind: Generate button, email list, loading/error/empty states; Vitest in CI (#33)
+- ✅ Docker end to end: nginx `proxy_read_timeout` 180 s, `restart: unless-stopped`, `nginx -t` in CI,
+  persistence across `down`/`up` verified (#34)
+- ⬜ Follow-up: browser re-check of `docs/testing/epic-1.md` rows 4.5, 6.1, 6.2 (verified with curl, not yet in the browser)
+- Decisions: no demo mode (real API for manual tests, fully mocked tests; #35 closed);
+  invalid AI emails are skipped, no top-up; use Docker Desktop only (no second engine in WSL)
+- Known limit: 50 emails = 5 *sequential* Claude calls (~60–80 s). Parallel batches would
+  cut this to ~15 s; candidate for a later story.
 
 ## 13. Roadmap
 
