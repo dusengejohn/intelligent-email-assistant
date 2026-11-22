@@ -50,6 +50,7 @@ jobs:
       # npm ci installs exactly what package-lock.json says (fails if it is out of date)
       - run: npm ci
       - run: npm run lint
+      - run: npm test
       - run: npm run build
 
   docker:
