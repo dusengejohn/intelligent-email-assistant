@@ -20,7 +20,7 @@ Guidance for Claude Code when working in this repository.
 ## Commands (run from `frontend/`)
 - Install deps: `npm install` (CI uses `npm ci`)
 - Dev server: `npm run dev` (http://localhost:5173, proxies `/api` → :8000)
-- Lint: `npm run lint` · Build (type-check + bundle): `npm run build`
+- Lint: `npm run lint` · Tests: `npm test` (Vitest) · Build (type-check + bundle): `npm run build`
 
 ## Conventions
 - Never use pip or edit requirements files — they don't exist. Add deps with

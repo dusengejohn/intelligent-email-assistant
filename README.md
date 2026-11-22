@@ -26,6 +26,7 @@ uv run ruff check . && uv run ruff format .   # lint + format
 cd frontend
 npm install
 npm run dev                               # http://localhost:5173 (proxies /api to :8000)
+npm test                                  # frontend unit tests (Vitest)
 
 # Or the full stack (from repo root)
 docker compose up --build                 # frontend :8080, backend :8000
@@ -42,6 +43,16 @@ uv remove <package>
 Commit both `pyproject.toml` and `uv.lock`.
 
 ## Docker and the `data/` folder
+
+**Use Docker Desktop only.** If a second Docker Engine is also installed inside
+Ubuntu/WSL (`systemctl is-active docker` says `active`), the two engines fight over
+ports 8080/8000 and `localhost:8080` can show an old stack that `docker ps` doesn't
+list. Turn the WSL engine off once:
+`sudo systemctl disable --now docker.service docker.socket containerd.service`,
+then check that `docker info --format '{{.Name}}'` prints `docker-desktop`.
+Docker Desktop publishes ports on **Windows**: open http://localhost:8080 in your
+Windows browser. From a WSL terminal, use the Windows host IP instead
+(`ip route | awk '/default/ {print $3}'`).
 
 The SQLite database lives in `data/app.db`, shared by local runs and Docker
 (`./data` is bind-mounted into the backend container at `/app/data`).
