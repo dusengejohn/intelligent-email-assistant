@@ -144,3 +144,17 @@ class ClassificationBatch(BaseModel):
     """The JSON object Claude must return when classifying: `{"results": [...]}`."""
 
     results: list[RawClassification]
+
+
+class SourceCounts(BaseModel):
+    ai: int
+    fallback: int
+
+
+class ClassifyResult(BaseModel):
+    """Response of POST /api/emails/classify."""
+
+    classified: int = Field(description="Emails classified by this request")
+    by_source: SourceCounts
+    remaining: int = Field(description="Unclassified emails left; call again if > 0")
+    emails: list[EmailRead] = Field(description="The emails classified by this request")
