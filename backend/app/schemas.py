@@ -129,3 +129,18 @@ class Classification(BaseModel):
     reason: str = Field(min_length=1, max_length=200, description="One sentence")
     suggested_response_minutes: int = Field(ge=1, le=480)
     source: ClassificationSource
+
+
+class RawClassification(BaseModel):
+    """One AI classification exactly as Claude returns it (shape only, no rules)."""
+
+    email_id: int
+    priority: str
+    reason: str
+    suggested_response_minutes: int
+
+
+class ClassificationBatch(BaseModel):
+    """The JSON object Claude must return when classifying: `{"results": [...]}`."""
+
+    results: list[RawClassification]
