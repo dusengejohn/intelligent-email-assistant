@@ -117,3 +117,15 @@ class EmailRead(BaseModel):
     suggested_response_minutes: int | None
     status: EmailStatus
     created_at: datetime
+
+
+# --- Classification ------------------------------------------------------------
+
+
+class Classification(BaseModel):
+    """One email's priority, from the AI, the fallback rules or a person."""
+
+    priority: Priority
+    reason: str = Field(min_length=1, max_length=200, description="One sentence")
+    suggested_response_minutes: int = Field(ge=1, le=480)
+    source: ClassificationSource
