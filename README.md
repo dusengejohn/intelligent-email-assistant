@@ -1,5 +1,9 @@
 # intelligent-email-assistant
 
+A small full-stack app for learning AI + modern SDLC: it generates realistic (fictional)
+workplace emails with Claude and lists them. Classification, a dashboard and calendar
+planning follow in later epics ([project brief](docs/PROJECT_BRIEF.md)).
+
 ## Prerequisites
 Developed in WSL (Ubuntu) + VS Code. Install these **inside WSL**, not on Windows:
 - [uv](https://docs.astral.sh/uv/) — `curl -LsSf https://astral.sh/uv/install.sh | sh` (installs Python 3.12 for you)
@@ -31,6 +35,35 @@ npm test                                  # frontend unit tests (Vitest)
 # Or the full stack (from repo root)
 docker compose up --build                 # frontend :8080, backend :8000
 ```
+
+## Using Claude (API key and cost)
+
+Generating emails calls the **Claude API**, which is **pay-as-you-go** and billed separately
+from any claude.ai subscription. Everything else (the list, tests, CI) works without a key.
+
+1. In the [Anthropic Console](https://console.anthropic.com): add a few dollars of credit
+   (Billing) and **set a monthly spend limit** (Settings → Limits) first.
+2. Create an API key just for this project (API Keys → Create Key; it's shown only once).
+3. Put it in `.env` at the repo root, which git ignores. **Never commit it.**
+   ```
+   ANTHROPIC_API_KEY=sk-ant-...
+   ```
+4. Restart what's running: `docker compose up -d backend`, or restart uvicorn.
+
+| | Cost with `claude-haiku-5-5` |
+|---|---|
+| Generate 10 emails (1 Claude call, ~15 s) | about **$0.0015** |
+| Generate 50 emails (5 calls, ~60–80 s) | about **$0.007** |
+
+- Every call logs its tokens: `docker compose logs backend | grep "Claude call"`.
+- No key → the app still works; **Generate** shows *"AI is not configured: set
+  ANTHROPIC_API_KEY in .env"* (HTTP 503).
+- **Tests and CI never call Claude** and need no key: the AI client is replaced by a fake
+  (`backend/tests/fakes.py`), and GitHub has no API key secret on purpose.
+
+**Generate emails:** open http://localhost:8080 (Docker) or http://localhost:5173 (dev),
+choose 1–50 and click **Generate emails**; or use the API docs at
+http://localhost:8000/docs (`POST /api/emails/generate` → *Try it out*).
 
 ## Managing dependencies
 
@@ -72,9 +105,12 @@ The SQLite database lives in `data/app.db`, shared by local runs and Docker
 
 ```
 .github/                   CI (backend, frontend, docker jobs), Dependabot, PR/issue templates
-backend/                   FastAPI app + tests (pyproject.toml, uv.lock)
-frontend/                  Vite app (served by nginx)
-docs/                      Documentation
+backend/app/               FastAPI app: main.py, config, db, models, schemas
+  routers/                 API endpoints (health, emails)
+  services/                Claude client, prompts, email generator
+backend/tests/             pytest (fakes.py = fake Claude client)
+frontend/src/              React app: App.tsx, api.ts (typed API client), components/
+docs/                      Brief, request flow, test checklists (docs/testing/)
 data/                      SQLite file (git-ignored)
 ```
 
@@ -94,5 +130,6 @@ Claude Code slash commands: `/story <issue>`, `/new-endpoint <description>`,
 `/explain <file or concept>`, `/check`, `/pr <issue>`.
 
 Project requirements and working agreement: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md).
-How the frontend reaches the backend, and how the healthcheck works:
-[docs/REQUEST_FLOW.md](docs/REQUEST_FLOW.md).
+How the frontend reaches the backend, the healthcheck, and the generate flow (with
+timeouts): [docs/REQUEST_FLOW.md](docs/REQUEST_FLOW.md). Epic 1 end-to-end test log:
+[docs/testing/epic-1.md](docs/testing/epic-1.md).

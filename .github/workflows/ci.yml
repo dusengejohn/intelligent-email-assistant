@@ -65,3 +65,10 @@ jobs:
           uid="$(docker compose run --rm --no-deps -T backend id -u)"
           echo "backend runs as UID $uid"
           test "$uid" != "0"
+      - name: nginx config is valid
+        # nginx -t parses the config without serving anything. It also resolves
+        # `backend` (proxy_pass), which only exists on the compose network, so map
+        # it to localhost for the check.
+        run: |
+          image="$(docker compose config --images | grep frontend)"
+          docker run --rm --add-host backend:127.0.0.1 "$image" nginx -t
