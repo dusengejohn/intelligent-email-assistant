@@ -7,10 +7,12 @@ from sqlmodel import Session, col, func, select
 
 from app.db import get_session
 from app.models import ClassificationSource, Email, EmailStatus, Priority
+from app.priorities import default_minutes
 from app.schemas import (
     Classification,
     ClassifyResult,
     EmailRead,
+    EmailUpdate,
     GenerateRequest,
     SourceCounts,
 )
@@ -151,6 +153,36 @@ def classify_one(email_id: int, session: SessionDep, ai: OptionalAIDep) -> Email
     if email is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
     _apply(email, classify_emails([email], ai)[email_id])
+    session.add(email)
+    session.commit()
+    session.refresh(email)
+    return email
+
+
+MANUAL_REASON = "Set manually."
+
+
+@router.patch(
+    "/{email_id}",
+    response_model=EmailRead,
+    summary="Change an email's priority (manual override) and/or status",
+    responses={404: {"description": "Email not found"}},
+)
+def update_email(email_id: int, update: EmailUpdate, session: SessionDep) -> Email:
+    # PATCH = partial update: only the fields that were sent are changed
+    email = session.get(Email, email_id)
+    if email is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
+
+    if update.priority is not None:
+        # The person's decision wins: marked manual, so bulk classify never touches it
+        email.priority = update.priority
+        email.priority_reason = MANUAL_REASON
+        email.classification_source = ClassificationSource.MANUAL
+        email.suggested_response_minutes = default_minutes(update.priority)
+    if update.status is not None:
+        email.status = update.status
+
     session.add(email)
     session.commit()
     session.refresh(email)

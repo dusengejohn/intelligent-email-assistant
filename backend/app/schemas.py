@@ -10,7 +10,15 @@ Generated emails pass two layers of validation:
 from datetime import UTC, datetime, timedelta
 from typing import Self
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from app.models import ClassificationSource, EmailStatus, Priority
 
@@ -158,3 +166,24 @@ class ClassifyResult(BaseModel):
     by_source: SourceCounts
     remaining: int = Field(description="Unclassified emails left; call again if > 0")
     emails: list[EmailRead] = Field(description="The emails classified by this request")
+
+
+class EmailUpdate(BaseModel):
+    """Body of PATCH /api/emails/{id}: send only the fields you want to change."""
+
+    # Unknown fields ("subject", typos like "priorty") are an error, not silently ignored
+    model_config = ConfigDict(extra="forbid")
+
+    priority: Priority | None = Field(default=None, description="Manual priority override")
+    status: EmailStatus | None = Field(default=None, description="new or handled")
+
+    @model_validator(mode="after")
+    def at_least_one_field_and_no_nulls(self) -> Self:
+        # model_fields_set = the fields that were actually in the request. It tells
+        # "not sent" (leave unchanged) apart from "sent as null" (not allowed).
+        if not self.model_fields_set:
+            raise ValueError("send at least one of: priority, status")
+        for name in self.model_fields_set:
+            if getattr(self, name) is None:
+                raise ValueError(f"{name} cannot be null")
+        return self
