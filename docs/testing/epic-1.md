@@ -11,7 +11,7 @@
 | Branch / base | `chore/1.8-epic1-e2e-docs` on `main` @ `3ae389f` (PR #44) |
 | Stack | `docker compose up -d --build` on Docker Desktop (WSL integration) |
 | Model | `claude-haiku-5-5`, `AI_TIMEOUT_SECONDS=30`, 1 retry |
-| Tested by | Claude Code (commands); browser rows not run (see below) |
+| Tested by | Claude Code (commands); browser rows 4.5, 6.1, 6.2 completed on 2026-11-23 (story 2.7) |
 | Total Claude cost | about **$0.02** |
 
 From a **WSL terminal**, Docker Desktop's ports are reached via the Windows host IP:
@@ -61,7 +61,7 @@ The key was blanked for the backend only, with a temporary compose override
 | 4.2 | `POST … {"count": 10}` | 503 with a clear message | **503** `AI is not configured: set ANTHROPIC_API_KEY in .env` | ✅ |
 | 4.3 | Rest of the app | still works | `/api/health` 200, page 200, all 105 emails listed | ✅ |
 | 4.4 | Restore (`docker compose up -d backend`) | key configured again | `key configured: True` | ✅ |
-| 4.5 | **Browser:** click Generate with the key removed | red banner with the 503 message; list unchanged | **not run** (see note below) | ⬜ |
+| 4.5 | **Browser:** click Generate with the key removed | red banner with the 503 message; list unchanged | done 2026-11-23: `POST /generate -> 503` from the browser, count unchanged (see `epic-2.md` A.2) | ✅ |
 
 ## 5. Build and CI
 
@@ -76,12 +76,12 @@ The key was blanked for the backend only, with a temporary compose override
 
 | # | Step | Expected | Actual | Result |
 |---|---|---|---|---|
-| 6.1 | http://localhost:8080, enter 10, **Generate emails** | button "Generating…", then 10 new emails with sender, subject, preview, local time | **not run** (see note below) | ⬜ |
-| 6.2 | Refresh the page (F5) | emails still listed | **not run** (see note below) | ⬜ |
+| 6.1 | http://localhost:8080, enter 10, **Generate emails** | button "Generating…", then 10 new emails with sender, subject, preview, local time | done 2026-11-23: `POST /generate -> 201` from the browser, 115 → 125 (see `epic-2.md` B.1) | ✅ |
+| 6.2 | Refresh the page (F5) | emails still listed | done 2026-11-23: a page reload listed emails generated 40 min earlier (see `epic-2.md`) | ✅ |
 
 ---
 
-## Not run: browser rows 4.5, 6.1, 6.2
+## Browser rows 4.5, 6.1, 6.2 (first not run, completed on 2026-11-23)
 
 These three steps were **not run** in this session. The server logs showed the page being
 loaded and reloaded in the browser (04:51 and 04:52 UTC) but no `POST /api/emails/generate`
@@ -91,7 +91,8 @@ to record.
 The same flows **were** verified through nginx with `curl` (the exact requests the page
 sends): 201 for 50 emails (2.2), 503 with the clear message without a key (4.2), and the
 list after a restart (3.2). The UI itself was checked in the browser in story 1.7 (#33).
-**Follow-up:** run 4.5, 6.1 and 6.2 in the browser and record the results here.
+**Follow-up done** in story 2.7 (#52) on 2026-11-23, with server-log evidence; see
+`docs/testing/epic-2.md`, section "Epic 1 browser follow-up".
 
 ## Known limits (not bugs)
 

@@ -46,6 +46,8 @@ Guidance for Claude Code when working in this repository.
 - Copy `.env.example` to `.env` for local config; never commit `.env`.
 - Claude is called **only** through `backend/app/services/ai_client.py` (`AIClient.parse`);
   tests pass a fake SDK client (`sdk_client=`) and never use the network or a real key.
+- AI features **with** a fallback depend on `get_optional_ai_client` (no key → `None` → fallback,
+  HTTP 200); features **without** one depend on `get_ai_client` (no key → HTTP 503).
 
 ## Automation
 - PostToolUse hooks auto-fix every file you edit: `ruff_after_edit.py` (backend
