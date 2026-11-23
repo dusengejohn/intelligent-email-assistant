@@ -81,6 +81,29 @@ card: it becomes `manual` and is never overwritten by later classifications.
 choose 1–50 and click **Generate emails**; or use the API docs at
 http://localhost:8000/docs (`POST /api/emails/generate` → *Try it out*).
 
+## Database migrations (Alembic)
+
+The database structure is versioned with [Alembic](https://alembic.sqlalchemy.org/)
+migrations in `backend/migrations/versions/`. **The backend applies them automatically
+at startup** (locally and in Docker), so normally there's nothing to do.
+
+When you change a model in `backend/app/models.py`:
+
+```bash
+cd backend
+uv run alembic revision --autogenerate -m "add deleted_at to email"   # writes a new file
+# read the generated file, then commit it TOGETHER with the model change
+uv run alembic upgrade head        # apply now (or just restart the backend)
+uv run alembic current             # which version the database is at
+uv run alembic history             # all migrations
+```
+
+- A test (`tests/test_migrations.py`) fails in CI if the models and the migrations differ.
+- A database created before migrations existed is *stamped* at the baseline (`0001`) on
+  first start: nothing is recreated and no data is touched.
+- Before risky changes, back up the database: `cp data/app.db data/backups/app-$(date +%F).db`
+  (`data/` is git-ignored).
+
 ## Managing dependencies
 
 ```bash
@@ -131,6 +154,7 @@ backend/app/               FastAPI app: main.py, config, db, models, schemas
   routers/                 API endpoints (health, emails)
   services/                Claude client, prompts, generator, classifier, fallback rules
 backend/scripts/           Manual developer tools (classifier eval; never in CI)
+backend/migrations/        Alembic database migrations (applied at startup)
 backend/tests/             pytest (fakes.py = fake Claude client)
 frontend/src/              React app: App.tsx, api.ts (typed API client), priorities.ts, components/
 docs/                      Brief, request flow, test checklists (docs/testing/)

@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from app.db import create_db_and_tables
+from app.db import migrate_database
 from app.routers import emails, health
 from app.services.errors import AIConfigError, AIServiceError
 
@@ -16,12 +16,14 @@ from app.services.errors import AIConfigError, AIServiceError
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s: %(message)s")
 # The SDK's HTTP library logs every request at INFO; keep only its warnings
 logging.getLogger("httpx2").setLevel(logging.WARNING)
+# Alembic announces its internal plugins at INFO on every startup: noise
+logging.getLogger("alembic.runtime.plugins").setLevel(logging.WARNING)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Runs once at startup (before `yield`) and once at shutdown (after it)
-    create_db_and_tables()
+    migrate_database()  # bring the database schema up to date (Alembic)
     yield
 
 

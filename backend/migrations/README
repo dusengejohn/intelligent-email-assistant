@@ -1,0 +1,9 @@
+Alembic migrations for the backend database (story 3.2).
+
+From backend/:
+  uv run alembic current                               # version of the database
+  uv run alembic history                               # all migrations
+  uv run alembic revision --autogenerate -m "add x"    # new migration from model changes
+  uv run alembic upgrade head                          # apply (the app also does this at startup)
+
+Always read the generated file, and commit it together with the model change.
