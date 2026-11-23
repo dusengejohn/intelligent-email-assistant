@@ -1,12 +1,14 @@
-import type { Email } from '../api'
+import type { Email, Priority } from '../api'
 import { EmailCard } from './EmailCard'
 
 interface Props {
   emails: Email[]
   loading: boolean
+  savingId: number | null
+  onPriorityChange: (id: number, priority: Priority) => void
 }
 
-export function EmailList({ emails, loading }: Props) {
+export function EmailList({ emails, loading, savingId, onPriorityChange }: Props) {
   if (loading) {
     return <p className="text-sm text-gray-500">Loading emails…</p>
   }
@@ -22,7 +24,11 @@ export function EmailList({ emails, loading }: Props) {
       {emails.map((email) => (
         // key: lets React track each card between renders
         <li key={email.id}>
-          <EmailCard email={email} />
+          <EmailCard
+            email={email}
+            saving={savingId === email.id}
+            onPriorityChange={onPriorityChange}
+          />
         </li>
       ))}
     </ul>
