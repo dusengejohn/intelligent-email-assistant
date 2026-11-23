@@ -387,14 +387,16 @@ The frontend code doesn't know or care which mode it's in.
 | Generate shows **502** "AI service error: …" | Claude timed out, was rate limited, or returned nothing valid | `docker compose logs backend \| grep -E "Claude call\|failed"` |
 | Generate shows **504** "took too long", but the emails appear after a refresh | nginx gave up before the backend finished | `proxy_read_timeout` in `nginx.conf`; generate fewer at once |
 | `localhost:8080` shows an **old** version that `docker ps` doesn't list | A second Docker Engine inside WSL holds the ports | `systemctl is-active docker`; see README "Docker and the `data/` folder" |
-| From a WSL terminal, `curl localhost:8080` fails but the Windows browser works | Docker Desktop publishes ports on **Windows** | Use the Windows host IP: `ip route \| awk '/default/ {print $3}'` |
+| From a WSL terminal, `curl localhost:8080` fails but the Windows browser works | Older Docker Desktop setups publish ports only on Windows | Use the Windows host IP: `ip route \| awk '/default/ {print $3}'` |
+| Dev mode: `uvicorn` fails with *address already in use*, or `:5173` shows Docker's data | The Docker backend holds port 8000 (also inside WSL) | `docker compose stop backend` before dev mode |
 
 ---
 
 ## 10. Try it yourself
 
-From a **WSL terminal** with Docker Desktop, replace `localhost` with the Windows host IP
-(`ip route | awk '/default/ {print $3}'`); in a Windows terminal or browser, `localhost` works.
+`localhost` works in a Windows browser and, with current Docker Desktop, in a WSL
+terminal too. If it doesn't in WSL on your setup, use the Windows host IP
+(`ip route | awk '/default/ {print $3}'`).
 
 ```bash
 # Watch both sides of every request

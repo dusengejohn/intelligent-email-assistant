@@ -5,11 +5,13 @@ export const MAX_COUNT = 50
 
 interface Props {
   generating: boolean
+  /** Another action (e.g. Classify) is running: block generating meanwhile */
+  disabled?: boolean
   onGenerate: (count: number, scenario: string) => void
 }
 
 /** Number + optional scenario + "Generate emails" button. */
-export function GenerateControls({ generating, onGenerate }: Props) {
+export function GenerateControls({ generating, disabled = false, onGenerate }: Props) {
   // Kept as text while typing, so the field can be briefly empty
   const [count, setCount] = useState('10')
   const [scenario, setScenario] = useState('')
@@ -19,7 +21,7 @@ export function GenerateControls({ generating, onGenerate }: Props) {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault() // stay on the page (no full-page form submit)
-    if (valid && !generating) onGenerate(value, scenario)
+    if (valid && !generating && !disabled) onGenerate(value, scenario)
   }
 
   return (
@@ -55,7 +57,7 @@ export function GenerateControls({ generating, onGenerate }: Props) {
       </label>
       <button
         type="submit"
-        disabled={generating || !valid}
+        disabled={generating || disabled || !valid}
         className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {generating ? 'Generating…' : 'Generate emails'}

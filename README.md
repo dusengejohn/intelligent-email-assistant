@@ -23,6 +23,7 @@ cp .env.example .env
 cd backend
 uv sync                                   # create .venv + install deps from uv.lock
 uv run uvicorn app.main:app --reload      # http://localhost:8000/api/health  (API docs: /docs)
+                                          # (Docker stack running? `docker compose stop backend` first: same port)
 uv run pytest                             # tests
 uv run ruff check . && uv run ruff format .   # lint + format
 
@@ -83,9 +84,15 @@ ports 8080/8000 and `localhost:8080` can show an old stack that `docker ps` does
 list. Turn the WSL engine off once:
 `sudo systemctl disable --now docker.service docker.socket containerd.service`,
 then check that `docker info --format '{{.Name}}'` prints `docker-desktop`.
-Docker Desktop publishes ports on **Windows**: open http://localhost:8080 in your
-Windows browser. From a WSL terminal, use the Windows host IP instead
-(`ip route | awk '/default/ {print $3}'`).
+Docker Desktop publishes ports on Windows **and inside WSL**: http://localhost:8080
+works in your Windows browser and in a WSL terminal. (If `curl localhost:8080` fails in
+WSL on your setup, use the Windows host IP: `ip route | awk '/default/ {print $3}'`.)
+
+**Docker and dev mode share port 8000.** While the Docker stack runs, its backend holds
+`:8000`, so `uv run uvicorn` fails with *"address already in use"*, and the Vite dev
+server (`:5173`) would silently talk to the **Docker** backend (real `.env` key, real
+data). Before dev mode, run `docker compose stop backend`; afterwards
+`docker compose up -d backend`.
 
 The SQLite database lives in `data/app.db`, shared by local runs and Docker
 (`./data` is bind-mounted into the backend container at `/app/data`).

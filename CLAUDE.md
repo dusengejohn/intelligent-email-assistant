@@ -16,6 +16,8 @@ Guidance for Claude Code when working in this repository.
 - `frontend/` — React + Vite + TypeScript + Tailwind, served by nginx in Docker; `/api/` is
   proxied to the backend (by Vite in dev, by nginx in Docker). `src/api.ts` is the typed
   API client (Vitest: `src/api.test.ts`); UI pieces live in `src/components/`.
+  `src/priorities.ts` mirrors `app/priorities.py` (labels, colors); the backend test
+  `tests/test_frontend_priorities_sync.py` fails if they drift apart.
 - `data/` — SQLite database file (git-ignored).
 - `docs/` — project documentation; manual end-to-end checklists in `docs/testing/`.
 
