@@ -130,6 +130,26 @@ export function updateEmail(id: number, changes: EmailChanges): Promise<Email> {
   })
 }
 
+/** Move one email to the Trash (204, no body). */
+export function deleteEmail(id: number): Promise<void> {
+  return request<void>(`/api/emails/${id}`, { method: 'DELETE' })
+}
+
+/** Bring an email back from the Trash, unchanged. */
+export function restoreEmail(id: number): Promise<Email> {
+  return request<Email>(`/api/emails/${id}/restore`, { method: 'POST' })
+}
+
+/** Permanently delete everything in the Trash. */
+export function emptyTrash(): Promise<{ deleted: number }> {
+  return request<{ deleted: number }>('/api/emails/trash', { method: 'DELETE' })
+}
+
+/** Re-classify one email (Claude, or the rules without a key). */
+export function classifyOne(id: number): Promise<Email> {
+  return request<Email>(`/api/emails/${id}/classify`, { method: 'POST' })
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response
   try {
@@ -140,6 +160,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!response.ok) {
     throw new ApiError(await errorMessage(response), response.status)
+  }
+  if (response.status === 204) {
+    return undefined as T // 204 No Content: success, there is no body to read
   }
   return (await response.json()) as T
 }

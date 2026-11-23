@@ -1,23 +1,37 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ApiError,
   classifyEmails,
+  classifyOne,
+  deleteEmail,
+  emptyTrash,
   generateEmails,
   getSummary,
   listEmails,
+  restoreEmail,
   updateEmail,
   type Email,
   type EmailSummary,
   type Priority,
 } from './api'
+import { ConfirmDialog } from './components/ConfirmDialog'
 import { EmailList } from './components/EmailList'
 import { ErrorBanner } from './components/ErrorBanner'
+import { ReadingPane } from './components/ReadingPane'
 import { Sidebar, ViewSelect } from './components/Sidebar'
+import { Toast } from './components/Toast'
 import { Toolbar } from './components/Toolbar'
+import { nextSelection } from './selection'
 import { viewById, viewFromUrl, viewUrl, type ViewId } from './views'
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : 'Something went wrong. Please try again.'
+}
+
+interface ToastState {
+  message: string
+  actionLabel?: string
+  onAction?: () => void
 }
 
 function App() {
@@ -27,17 +41,24 @@ function App() {
   const [reloadKey, setReloadKey] = useState(0) // bump it to reload list + counts
   const [emails, setEmails] = useState<Email[]>([])
   const [summary, setSummary] = useState<EmailSummary | null>(null)
+  const [selectedId, setSelectedId] = useState<number | null>(null) // email in the reading pane
   const [loadingList, setLoadingList] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [classifying, setClassifying] = useState(false)
+  const [busy, setBusy] = useState(false) // a reading-pane action is running
   const [progress, setProgress] = useState(0) // emails classified so far in this click
   const [target, setTarget] = useState(0) // unclassified emails when the click started
   const [notice, setNotice] = useState<string | null>(null) // result of the last classify
-  const [savingId, setSavingId] = useState<number | null>(null) // email whose priority is saving
+  const [toast, setToast] = useState<ToastState | null>(null)
+  const [confirmEmpty, setConfirmEmpty] = useState(false) // "Empty trash?" dialog open
   const [error, setError] = useState<string | null>(null)
+  // The ids of the list as last shown, to find "the next email" after one leaves
+  const shownIds = useRef<number[]>([])
 
   const current = viewById(view)
+  const inTrash = view === 'trash'
   const unclassified = summary?.unclassified ?? 0
+  const selected = emails.find((e) => e.id === selectedId) ?? null
 
   // Load the current view's emails and all counts, in parallel. Runs at start,
   // when the view changes and after every change (reloadKey). `cancelled` drops a
@@ -47,6 +68,18 @@ function App() {
     Promise.all([listEmails(viewById(view).filter), getSummary()])
       .then(([list, counts]) => {
         if (cancelled) return
+        const ids = list.map((e) => e.id)
+        // Copy the OLD ids now: React runs the updater below later (during the next
+        // render), when shownIds.current already holds the NEW list
+        const previousIds = shownIds.current
+        // The open email left this view (deleted, restored, re-prioritised...):
+        // open the one below it instead, or above, or close the pane
+        setSelectedId((open) => {
+          if (open === null || ids.includes(open)) return open
+          const next = nextSelection(previousIds, open)
+          return next !== null && ids.includes(next) ? next : null
+        })
+        shownIds.current = ids
         setEmails(list)
         setSummary(counts)
       })
@@ -63,7 +96,10 @@ function App() {
 
   // Browser Back/Forward: the URL changed, so follow it
   useEffect(() => {
-    const onPopState = () => setView(viewFromUrl(window.location.search))
+    const onPopState = () => {
+      setSelectedId(null)
+      setView(viewFromUrl(window.location.search))
+    }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
@@ -71,6 +107,7 @@ function App() {
   function selectView(id: ViewId) {
     if (id === view) return
     setLoadingList(true)
+    setSelectedId(null) // a new view starts without an open email
     // pushState: changes the address without reloading, and adds a Back step
     window.history.pushState(null, '', viewUrl(id))
     setView(id)
@@ -78,6 +115,23 @@ function App() {
 
   function reload() {
     setReloadKey((key) => key + 1)
+  }
+
+  const closeToast = useCallback(() => setToast(null), [])
+
+  /** Run one reading-pane action: buttons disabled meanwhile, errors in the banner. */
+  async function act(action: () => Promise<unknown>, after?: () => void) {
+    setBusy(true)
+    setError(null)
+    try {
+      await action()
+      after?.()
+    } catch (err) {
+      setError(messageOf(err)) // nothing changed; the pane keeps its state
+    } finally {
+      setBusy(false)
+      reload() // list + counts: the email may have moved or left the view
+    }
   }
 
   async function handleGenerate(count: number, scenario: string) {
@@ -117,19 +171,29 @@ function App() {
     }
   }
 
-  async function handlePriorityChange(id: number, priority: Priority) {
-    setSavingId(id)
-    setError(null)
-    try {
-      await updateEmail(id, { priority })
-      // The email may move within the view, or leave it (e.g. Critical -> High),
-      // and the counts change: reload both instead of patching one row
-      reload()
-    } catch (err) {
-      setError(messageOf(err)) // the row keeps its previous priority
-    } finally {
-      setSavingId(null)
-    }
+  function handleDelete(email: Email) {
+    // Reversible, so no "are you sure?": act at once and offer Undo
+    void act(
+      () => deleteEmail(email.id),
+      () =>
+        setToast({
+          message: 'Email moved to Trash.',
+          actionLabel: 'Undo',
+          onAction: () => {
+            setToast(null)
+            void act(() => restoreEmail(email.id))
+          },
+        }),
+    )
+  }
+
+  function handleEmptyTrash() {
+    setConfirmEmpty(false)
+    void act(async () => {
+      const { deleted } = await emptyTrash()
+      setSelectedId(null)
+      setToast({ message: `Permanently deleted ${deleted} email${deleted === 1 ? '' : 's'}.` })
+    })
   }
 
   // Status line under the toolbar: progress, result of the last action, or a hint
@@ -139,8 +203,10 @@ function App() {
       ? `Classifying… ${progress} of ${target}`
       : (notice ?? `${unclassified} unclassified`)
 
-  // App shell: the page itself never scrolls (h-screen); only the list does.
-  // min-h-0 / min-w-0 let flex children shrink so overflow-y-auto can work.
+  // App shell: the page itself never scrolls (h-screen); only the list and the
+  // pane do. min-h-0 / min-w-0 let flex children shrink so overflow-y-auto works.
+  // Wide screens (xl): list and pane side by side. Narrower: the pane replaces
+  // the list while an email is open ("Back to list").
   return (
     <div className="flex h-screen flex-col bg-gray-50">
       <Toolbar
@@ -160,22 +226,56 @@ function App() {
       )}
       <div className="flex min-h-0 flex-1">
         <Sidebar active={view} summary={summary} onSelect={selectView} />
-        {/* `relative` matters: each row has a screen-reader-only label (sr-only =
+        {/* `relative` matters: rows contain screen-reader-only text (sr-only =
             position: absolute). A scroll container only clips absolutely positioned
-            children if it is itself positioned; without it those labels stuck out
-            below the page and made the WHOLE page scroll into a long blank area. */}
-        <main data-testid="list-scroll" className="relative min-w-0 flex-1 overflow-y-auto bg-white">
+            children if it is itself positioned; without it they stuck out below the
+            page and made the WHOLE page scroll into a long blank area (#66). */}
+        <main
+          data-testid="list-scroll"
+          className={`relative min-w-0 flex-1 overflow-y-auto bg-white ${selected ? 'hidden xl:block' : ''}`}
+        >
           <ViewSelect active={view} summary={summary} onSelect={selectView} />
           <EmailList
             emails={emails}
             loading={loadingList}
-            savingId={savingId}
             emptyText={current.empty}
-            readOnly={view === 'trash'}
-            onPriorityChange={handlePriorityChange}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onEmptyTrash={inTrash ? () => setConfirmEmpty(true) : undefined}
           />
         </main>
+        {selected && (
+          <aside className="relative min-w-0 flex-1 overflow-y-auto border-l border-gray-200 bg-white xl:w-[45%] xl:flex-none">
+            <ReadingPane
+              email={selected}
+              inTrash={inTrash}
+              busy={busy}
+              onPriorityChange={(priority: Priority) => void act(() => updateEmail(selected.id, { priority }))}
+              onToggleHandled={() =>
+                void act(() =>
+                  updateEmail(selected.id, { status: selected.status === 'handled' ? 'new' : 'handled' }),
+                )
+              }
+              onReclassify={() => void act(() => classifyOne(selected.id))}
+              onDelete={() => handleDelete(selected)}
+              onRestore={() => void act(() => restoreEmail(selected.id))}
+              onClose={() => setSelectedId(null)}
+            />
+          </aside>
+        )}
       </div>
+      {confirmEmpty && (
+        <ConfirmDialog
+          title="Empty the Trash?"
+          message={`Permanently delete ${summary?.trash ?? 0} email${summary?.trash === 1 ? '' : 's'}? This can't be undone.`}
+          confirmLabel="Delete forever"
+          onConfirm={handleEmptyTrash}
+          onCancel={() => setConfirmEmpty(false)}
+        />
+      )}
+      {toast && (
+        <Toast message={toast.message} actionLabel={toast.actionLabel} onAction={toast.onAction} onDismiss={closeToast} />
+      )}
     </div>
   )
 }

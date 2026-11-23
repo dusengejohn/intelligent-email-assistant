@@ -25,6 +25,9 @@ Guidance for Claude Code when working in this repository.
   The list header and rows share one grid template (`src/components/columns.ts`).
   `src/views.ts` is the single table of sidebar views (label, API filter, summary count);
   the selected view lives in the URL (`?view=critical`, History API for Back/Forward).
+  `ReadingPane` holds the per-email actions; `Toast` (reusable, auto-hides, optional action
+  such as Undo) and `ConfirmDialog` (only for irreversible actions) are shared components;
+  `src/selection.ts` picks the next email when the open one leaves the view.
   `src/priorities.ts` mirrors `app/priorities.py` (labels, colors); the backend test
   `tests/test_frontend_priorities_sync.py` fails if they drift apart.
 - `data/` — SQLite database file (git-ignored).

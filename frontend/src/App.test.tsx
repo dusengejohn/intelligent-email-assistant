@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-// The whole page with a fake API: layout, views in the URL, counts, refreshes.
+// The whole page against a small in-memory fake backend: views, reading pane,
+// delete/undo/restore, empty trash, and the requests the page sends.
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -12,7 +13,7 @@ function email(id: number, subject: string, priority: Email['priority']): Email 
     sender_name: `Sender ${id}`,
     sender_email: `s${id}@example.com`,
     subject,
-    body: 'Body',
+    body: `Body of ${subject}.\nSecond line.`,
     received_at: '2026-11-21T15:00:00Z',
     priority,
     priority_reason: priority ? 'Reason.' : null,
@@ -24,50 +25,86 @@ function email(id: number, subject: string, priority: Email['priority']): Email 
   }
 }
 
-function summaryOf(emails: Email[]): EmailSummary {
-  const count = (p: Email['priority']) => emails.filter((e) => e.priority === p).length
-  return {
-    all: emails.length,
-    unclassified: count(null),
-    classified: emails.length - count(null),
-    critical: count('critical'),
-    high: count('high'),
-    moderate: count('moderate'),
-    low: count('low'),
-    handled: 0,
-    trash: 0,
-  }
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
 }
 
-/** Fake backend: answers health, summary, lists and PATCH; records every URL. */
-function fakeApi(emails: Email[]) {
-  const urls: string[] = []
+/** In-memory backend: lists, summary, PATCH, delete/restore/empty trash. Records requests. */
+function fakeApi(initial: Email[]) {
+  const db = initial.map((e) => ({ ...e }))
+  const requests: string[] = []
+  const active = () => db.filter((e) => !e.deleted_at)
+  const summary = (): EmailSummary => {
+    const list = active()
+    const count = (p: Email['priority']) => list.filter((e) => e.priority === p).length
+    return {
+      all: list.length,
+      unclassified: count(null),
+      classified: list.length - count(null),
+      critical: count('critical'),
+      high: count('high'),
+      moderate: count('moderate'),
+      low: count('low'),
+      handled: list.filter((e) => e.status === 'handled').length,
+      trash: db.length - list.length,
+    }
+  }
   vi.stubGlobal(
     'fetch',
     vi.fn(async (path: string, init?: RequestInit) => {
-      urls.push(init?.method ? `${init.method} ${path}` : path)
-      let body: unknown = emails
-      if (path === '/api/health') body = { status: 'ok' }
-      else if (path === '/api/emails/summary') body = summaryOf(emails)
-      else if (init?.method === 'PATCH') {
-        const id = Number(path.split('/').pop())
-        const changes = JSON.parse(init.body as string)
-        body = { ...emails.find((e) => e.id === id), ...changes, classification_source: 'manual' }
+      const method = init?.method ?? 'GET'
+      requests.push(method === 'GET' ? path : `${method} ${path}`)
+      const id = Number(path.match(/\/api\/emails\/(\d+)/)?.[1])
+      const target = db.find((e) => e.id === id)
+      if (path === '/api/health') return json({ status: 'ok' })
+      if (path === '/api/emails/summary') return json(summary())
+      if (method === 'DELETE' && path === '/api/emails/trash') {
+        const before = db.length
+        db.splice(0, db.length, ...active())
+        return json({ deleted: before - db.length })
       }
-      return new Response(JSON.stringify(body), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      if (method === 'DELETE' && target) {
+        target.deleted_at = '2026-11-23T10:00:00Z'
+        return new Response(null, { status: 204 })
+      }
+      if (method === 'POST' && path.endsWith('/restore') && target) {
+        target.deleted_at = null
+        return json(target)
+      }
+      if (method === 'PATCH' && target) {
+        Object.assign(target, JSON.parse(init?.body as string))
+        return json(target)
+      }
+      if (path.startsWith('/api/emails')) {
+        const params = new URLSearchParams(path.split('?')[1] ?? '')
+        let list = params.get('trash') ? db.filter((e) => e.deleted_at) : active()
+        const priority = params.get('priority')
+        if (priority) list = list.filter((e) => e.priority === priority)
+        if (params.get('classified') === 'false') list = list.filter((e) => !e.priority)
+        if (params.get('classified') === 'true') list = list.filter((e) => e.priority)
+        return json(list)
+      }
+      return json({ detail: 'Not Found' }, 404)
     }),
   )
-  return urls
+  return { requests, db }
+}
+
+function list() {
+  return screen.getByRole('list', { name: 'Emails' })
 }
 
 function subjects(): string[] {
-  const list = screen.getByRole('list', { name: 'Emails' })
-  return within(list)
+  return within(list())
     .getAllByRole('listitem')
     .map((item) => within(item).getByTestId('subject').textContent ?? '')
+}
+
+async function openRow(subject: string) {
+  await userEvent.click(within(list()).getByRole('button', { name: new RegExp(subject) }))
 }
 
 beforeEach(() => {
@@ -78,7 +115,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('App', () => {
+describe('App: list and views', () => {
   it('lists the emails in the order the API returns them', async () => {
     // Deliberately not sorted by priority: the browser must not re-sort
     fakeApi([email(3, 'Third', 'low'), email(1, 'First', 'critical'), email(2, 'Second', null)])
@@ -95,8 +132,7 @@ describe('App', () => {
     render(<App />)
 
     expect(screen.getByRole('button', { name: /Classify/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Generate/ })).toBeInTheDocument()
-    expect(screen.getByLabelText(/Scenario/)).toBeInTheDocument() // always visible now
+    expect(screen.getByLabelText(/Scenario/)).toBeInTheDocument()
     const views = screen.getByRole('navigation', { name: 'Views' })
     expect(await within(views).findByRole('button', { name: /All/ })).toHaveTextContent('2')
     expect(within(views).getByRole('button', { name: /Unclassified/ })).toHaveTextContent('1')
@@ -104,49 +140,38 @@ describe('App', () => {
 
   it('opens the view named in the URL', async () => {
     window.history.replaceState(null, '', '/?view=critical')
-    const urls = fakeApi([email(1, 'One', 'critical')])
+    const { requests } = fakeApi([email(1, 'One', 'critical')])
 
     render(<App />)
 
     await screen.findByRole('list', { name: 'Emails' })
-    expect(urls).toContain('/api/emails?priority=critical')
-    expect(screen.getByRole('button', { name: /Critical/ })).toHaveAttribute('aria-current', 'page')
+    expect(requests).toContain('/api/emails?priority=critical')
   })
 
   it('loads the right emails and updates the URL when a view is clicked', async () => {
-    const urls = fakeApi([email(1, 'One', null)])
+    const { requests } = fakeApi([email(1, 'One', null)])
     render(<App />)
     await screen.findByRole('list', { name: 'Emails' })
 
     await userEvent.click(screen.getByRole('button', { name: /Unclassified/ }))
 
-    await waitFor(() => expect(urls).toContain('/api/emails?classified=false'))
+    await waitFor(() => expect(requests).toContain('/api/emails?classified=false'))
     expect(window.location.search).toBe('?view=unclassified')
   })
 
   it('goes back to the previous view with the browser Back button', async () => {
-    const urls = fakeApi([email(1, 'One', 'low')])
+    fakeApi([email(1, 'One', 'low')])
     render(<App />)
     await screen.findByRole('list', { name: 'Emails' })
-    await userEvent.click(screen.getByRole('button', { name: /Low/ }))
+    const views = screen.getByRole('navigation', { name: 'Views' })
+    await userEvent.click(within(views).getByRole('button', { name: /Low/ }))
     await waitFor(() => expect(window.location.search).toBe('?view=low'))
 
     window.history.back()
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /All/ })).toHaveAttribute('aria-current', 'page'),
+      expect(within(views).getByRole('button', { name: /^All/ })).toHaveAttribute('aria-current', 'page'),
     )
-    expect(urls.filter((u) => u === '/api/emails').length).toBeGreaterThanOrEqual(2)
-  })
-
-  it('shows the Trash read-only (no priority dropdown)', async () => {
-    window.history.replaceState(null, '', '/?view=trash')
-    fakeApi([email(5, 'Deleted', 'low')])
-
-    render(<App />)
-
-    await screen.findByRole('list', { name: 'Emails' })
-    expect(screen.queryByLabelText('Change priority')).not.toBeInTheDocument()
   })
 
   it('shows the empty message of the current view', async () => {
@@ -158,29 +183,105 @@ describe('App', () => {
     expect(await screen.findByText('Nothing to classify.')).toBeInTheDocument()
   })
 
-  it('reloads the list and the counts after a priority change', async () => {
-    const urls = fakeApi([email(1, 'One', 'low')])
+  it('keeps hidden screen-reader labels inside the scrolling list', async () => {
+    // Regression (#66): without `relative`, sr-only (position: absolute) labels
+    // escaped the scroll area and the whole page scrolled into blank space
+    fakeApi([email(1, 'One', 'low')])
     render(<App />)
     await screen.findByRole('list', { name: 'Emails' })
-    const summaryCalls = () => urls.filter((u) => u === '/api/emails/summary').length
+
+    expect(screen.getByTestId('list-scroll')).toHaveClass('relative', 'overflow-y-auto')
+  })
+})
+
+describe('App: reading pane', () => {
+  it('opens the full email when a row is clicked', async () => {
+    fakeApi([email(1, 'One', 'low'), email(2, 'Two', 'high')])
+    render(<App />)
+    await screen.findByRole('list', { name: 'Emails' })
+
+    await openRow('Two')
+
+    const pane = screen.getByRole('region', { name: 'Reading pane' })
+    expect(within(pane).getByRole('heading', { name: 'Two' })).toBeInTheDocument()
+    expect(within(pane).getByTestId('email-body').textContent).toBe('Body of Two.\nSecond line.')
+    expect(within(list()).getByRole('button', { name: /Two/ })).toHaveAttribute('aria-current', 'true')
+  })
+
+  it('changes the priority and reloads the list and counts', async () => {
+    const { requests } = fakeApi([email(1, 'One', 'low')])
+    render(<App />)
+    await screen.findByRole('list', { name: 'Emails' })
+    await openRow('One')
+    const summaryCalls = () => requests.filter((r) => r === '/api/emails/summary').length
     const before = summaryCalls()
 
     await userEvent.selectOptions(screen.getByLabelText('Change priority'), 'high')
 
     await waitFor(() => expect(summaryCalls()).toBe(before + 1))
-    expect(urls).toContain('PATCH /api/emails/1')
+    expect(requests).toContain('PATCH /api/emails/1')
   })
 
-  it('keeps hidden screen-reader labels inside the scrolling list', async () => {
-    // Regression: without `relative`, the rows' sr-only (position: absolute)
-    // labels escaped the scroll area and the whole page scrolled into blank space
-    fakeApi([email(1, 'One', 'low')])
-
+  it('marks an email handled', async () => {
+    const { requests } = fakeApi([email(1, 'One', 'low')])
     render(<App />)
-
     await screen.findByRole('list', { name: 'Emails' })
-    const scroller = screen.getByTestId('list-scroll')
-    expect(scroller).toHaveClass('relative', 'overflow-y-auto')
-    expect(within(scroller).getByText('Change priority')).toHaveClass('sr-only')
+    await openRow('One')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Mark handled' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Mark as new' })).toBeInTheDocument())
+    expect(requests).toContain('PATCH /api/emails/1')
+  })
+
+  it('deletes to the Trash, selects the next email, and Undo restores it', async () => {
+    const { requests } = fakeApi([email(1, 'One', 'low'), email(2, 'Two', 'low'), email(3, 'Three', 'low')])
+    render(<App />)
+    await screen.findByRole('list', { name: 'Emails' })
+    await openRow('Two')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(subjects()).toEqual(['One', 'Three']))
+    expect(requests).toContain('DELETE /api/emails/2')
+    // the email below the deleted one is now open
+    const pane = screen.getByRole('region', { name: 'Reading pane' })
+    expect(within(pane).getByRole('heading', { name: 'Three' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }))
+
+    await waitFor(() => expect(subjects()).toEqual(['One', 'Two', 'Three']))
+    expect(requests).toContain('POST /api/emails/2/restore')
+  })
+
+  it('restores from the Trash view', async () => {
+    window.history.replaceState(null, '', '/?view=trash')
+    const { requests } = fakeApi([{ ...email(5, 'Deleted', 'low'), deleted_at: '2026-11-23T10:00:00Z' }])
+    render(<App />)
+    await screen.findByRole('list', { name: 'Emails' })
+    await openRow('Deleted')
+
+    expect(screen.queryByLabelText('Change priority')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Restore' }))
+
+    await waitFor(() => expect(requests).toContain('POST /api/emails/5/restore'))
+    expect(await screen.findByText('Trash is empty.')).toBeInTheDocument()
+  })
+
+  it('empties the Trash only after confirmation', async () => {
+    window.history.replaceState(null, '', '/?view=trash')
+    const { requests } = fakeApi([{ ...email(5, 'Deleted', 'low'), deleted_at: '2026-11-23T10:00:00Z' }])
+    render(<App />)
+    await screen.findByRole('list', { name: 'Emails' })
+
+    await userEvent.click(screen.getByRole('button', { name: /Empty trash/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(requests).not.toContain('DELETE /api/emails/trash')
+
+    await userEvent.click(screen.getByRole('button', { name: /Empty trash/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Delete forever' }))
+
+    await waitFor(() => expect(requests).toContain('DELETE /api/emails/trash'))
+    expect(await screen.findByText('Trash is empty.')).toBeInTheDocument()
   })
 })

@@ -4,9 +4,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ApiError,
   classifyEmails,
+  classifyOne,
+  deleteEmail,
+  emptyTrash,
   generateEmails,
   getSummary,
   listEmails,
+  restoreEmail,
   updateEmail,
   type Email,
 } from './api'
@@ -283,5 +287,44 @@ describe('getSummary', () => {
 
     expect(await getSummary()).toEqual(counts)
     expect(mock).toHaveBeenCalledWith('/api/emails/summary', undefined)
+  })
+})
+
+describe('single-email actions and the Trash', () => {
+  it('deleteEmail sends DELETE and accepts 204 No Content (empty body)', async () => {
+    const mock = fakeFetch(new Response(null, { status: 204 }))
+
+    await expect(deleteEmail(7)).resolves.toBeUndefined()
+    expect(mock).toHaveBeenCalledWith('/api/emails/7', { method: 'DELETE' })
+  })
+
+  it('restoreEmail posts to /restore and returns the email', async () => {
+    const mock = fakeFetch(jsonResponse(200, EMAIL))
+
+    expect(await restoreEmail(1)).toEqual(EMAIL)
+    expect(mock).toHaveBeenCalledWith('/api/emails/1/restore', { method: 'POST' })
+  })
+
+  it('emptyTrash deletes the Trash and returns how many', async () => {
+    const mock = fakeFetch(jsonResponse(200, { deleted: 2 }))
+
+    expect(await emptyTrash()).toEqual({ deleted: 2 })
+    expect(mock).toHaveBeenCalledWith('/api/emails/trash', { method: 'DELETE' })
+  })
+
+  it('classifyOne re-classifies one email', async () => {
+    const mock = fakeFetch(jsonResponse(200, EMAIL))
+
+    expect(await classifyOne(1)).toEqual(EMAIL)
+    expect(mock).toHaveBeenCalledWith('/api/emails/1/classify', { method: 'POST' })
+  })
+
+  it('a 404 on delete becomes an ApiError', async () => {
+    fakeFetch(jsonResponse(404, { detail: 'Email not found' }))
+
+    const err = await apiError(() => deleteEmail(999))
+
+    expect(err.status).toBe(404)
+    expect(err.message).toBe('Email not found')
   })
 })
