@@ -23,6 +23,8 @@ Guidance for Claude Code when working in this repository.
   use React Testing Library in a simulated browser: a file opts in with
   `// @vitest-environment jsdom` (others run in Node); shared setup in `src/test-setup.ts`.
   The list header and rows share one grid template (`src/components/columns.ts`).
+  `src/views.ts` is the single table of sidebar views (label, API filter, summary count);
+  the selected view lives in the URL (`?view=critical`, History API for Back/Forward).
   `src/priorities.ts` mirrors `app/priorities.py` (labels, colors); the backend test
   `tests/test_frontend_priorities_sync.py` fails if they drift apart.
 - `data/` — SQLite database file (git-ignored).

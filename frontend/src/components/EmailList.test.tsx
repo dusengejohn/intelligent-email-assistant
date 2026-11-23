@@ -32,7 +32,15 @@ const EMAILS = [
 ]
 
 function renderList() {
-  render(<EmailList emails={EMAILS} loading={false} savingId={null} onPriorityChange={vi.fn()} />)
+  render(
+    <EmailList
+      emails={EMAILS}
+      loading={false}
+      savingId={null}
+      emptyText="No emails yet."
+      onPriorityChange={vi.fn()}
+    />,
+  )
 }
 
 describe('EmailList', () => {
@@ -60,7 +68,15 @@ describe('EmailList', () => {
   })
 
   it('has no header when the list is empty', () => {
-    render(<EmailList emails={[]} loading={false} savingId={null} onPriorityChange={vi.fn()} />)
+    render(
+      <EmailList
+        emails={[]}
+        loading={false}
+        savingId={null}
+        emptyText="No emails yet."
+        onPriorityChange={vi.fn()}
+      />,
+    )
 
     expect(screen.queryByTestId('list-header')).not.toBeInTheDocument()
   })
