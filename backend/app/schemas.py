@@ -126,6 +126,7 @@ class EmailRead(BaseModel):
     suggested_response_minutes: int | None
     status: EmailStatus
     created_at: datetime
+    deleted_at: datetime | None = Field(description="Set when the email is in the Trash")
 
 
 # --- Classification ------------------------------------------------------------
@@ -213,3 +214,10 @@ class EmailSummary(BaseModel):
     moderate: int
     low: int
     handled: int
+    trash: int = Field(description="Emails in the Trash (not included in the other counts)")
+
+
+class EmptyTrashResult(BaseModel):
+    """Response of DELETE /api/emails/trash."""
+
+    deleted: int = Field(description="Emails permanently deleted")

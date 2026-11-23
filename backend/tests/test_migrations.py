@@ -7,6 +7,7 @@ so real migrations run here, never against data/app.db.
 from datetime import UTC, datetime
 from pathlib import Path
 
+from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
@@ -16,7 +17,7 @@ from sqlmodel import Session, SQLModel
 
 from app.db import BASELINE_REVISION, alembic_config, get_engine, migrate_database
 from app.main import app
-from app.models import Email, Priority
+from app.models import Email
 
 VERSIONS = Path(__file__).resolve().parents[1] / "migrations" / "versions"
 
@@ -52,27 +53,34 @@ def test_fresh_database_is_created_by_the_migrations() -> None:
 
 
 def test_existing_database_is_stamped_and_keeps_its_data() -> None:
-    # Like data/app.db today: tables made by create_all(), no migration history
-    SQLModel.metadata.create_all(get_engine())
-    with Session(get_engine()) as session:
+    # Like data/app.db before story 3.2: the 0001 schema, rows, NO migration history.
+    # Built from the baseline migration (not create_all with today's models, which
+    # already contain later columns such as deleted_at).
+    command.upgrade(alembic_config(str(get_engine().url)), BASELINE_REVISION)
+    with get_engine().begin() as connection:
+        connection.execute(text("DROP TABLE alembic_version"))
         for i in range(3):
-            session.add(
-                Email(
-                    sender_name=f"Sender {i}",
-                    sender_email=f"s{i}@example.com",
-                    subject=f"Subject {i}",
-                    body="Body",
-                    received_at=datetime(2026, 11, 23, 9, i, tzinfo=UTC),
-                    priority=Priority.HIGH if i else None,
-                )
+            connection.execute(
+                text(
+                    "INSERT INTO email (sender_name, sender_email, subject, body, received_at,"
+                    " priority, status, created_at) VALUES (:name, :addr, :subject, 'Body',"
+                    " '2026-11-23 09:00:00', :priority, 'NEW', '2026-11-23 09:00:00')"
+                ),
+                {
+                    "name": f"Sender {i}",
+                    "addr": f"s{i}@example.com",
+                    "subject": f"Subject {i}",
+                    "priority": "HIGH" if i else None,
+                },
             )
-        session.commit()
     before = all_rows()
     assert "alembic_version" not in table_names()
 
     migrate_database()
 
-    assert all_rows() == before  # every row and field unchanged
+    after = all_rows()
+    assert [row[: len(before[0])] for row in after] == before  # old values unchanged
+    assert {row[-1] for row in after} == {None}  # later columns (deleted_at) empty
     assert current_revision() == head_revision()
 
 
@@ -130,3 +138,30 @@ def test_migration_files_do_not_import_app_code() -> None:
     for path in VERSIONS.glob("*.py"):
         source = path.read_text()
         assert "from app" not in source and "import app" not in source, path.name
+
+
+def test_0002_adds_deleted_at_and_can_be_undone() -> None:
+    # A database at the baseline, with rows, like data/app.db before story 3.3
+    config = alembic_config(str(get_engine().url))
+    command.upgrade(config, BASELINE_REVISION)
+    with get_engine().begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO email (sender_name, sender_email, subject, body, received_at,"
+                " status, created_at) VALUES ('Ada', 'ada@example.com', 'Old', 'Body',"
+                " '2026-11-23 09:00:00', 'NEW', '2026-11-23 09:00:00')"
+            )
+        )
+    before = all_rows()
+
+    command.upgrade(config, "0002")
+    columns = {c["name"] for c in inspect(get_engine()).get_columns("email")}
+    assert "deleted_at" in columns
+    after = all_rows()
+    assert [row[:-1] for row in after] == before  # old values unchanged
+    assert [row[-1] for row in after] == [None]  # new column empty
+
+    command.downgrade(config, BASELINE_REVISION)
+    columns = {c["name"] for c in inspect(get_engine()).get_columns("email")}
+    assert "deleted_at" not in columns
+    assert all_rows() == before  # undo keeps the data too

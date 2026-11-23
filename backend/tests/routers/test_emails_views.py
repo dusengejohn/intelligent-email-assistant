@@ -150,6 +150,7 @@ def test_summary_counts(client: TestClient, inbox: None) -> None:
         "moderate": 1,
         "low": 2,
         "handled": 4,
+        "trash": 0,  # story 3.3
     }
 
 
