@@ -10,11 +10,12 @@ interface Props {
   onGenerate: (count: number, scenario: string) => void
 }
 
-/** Number + optional scenario + "Generate emails" button. */
+/** Compact toolbar form: count + "Generate emails"; the scenario sits behind a toggle. */
 export function GenerateControls({ generating, disabled = false, onGenerate }: Props) {
   // Kept as text while typing, so the field can be briefly empty
   const [count, setCount] = useState('10')
   const [scenario, setScenario] = useState('')
+  const [showScenario, setShowScenario] = useState(false)
 
   const value = Number(count)
   const valid = Number.isInteger(value) && value >= MIN_COUNT && value <= MAX_COUNT
@@ -25,12 +26,9 @@ export function GenerateControls({ generating, disabled = false, onGenerate }: P
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:flex-row sm:items-end"
-    >
-      <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
-        How many
+    <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-2">
+      <label className="flex items-center gap-1 text-sm text-gray-700">
+        <span className="sr-only">How many emails</span>
         <input
           type="number"
           min={MIN_COUNT}
@@ -40,25 +38,35 @@ export function GenerateControls({ generating, disabled = false, onGenerate }: P
           value={count}
           onChange={(e) => setCount(e.target.value)}
           disabled={generating}
-          className="w-24 rounded-md border border-gray-300 px-2 py-1.5 invalid:border-red-500"
+          className="w-16 rounded-md border border-gray-300 px-2 py-1 invalid:border-red-500"
         />
       </label>
-      <label className="flex flex-1 flex-col gap-1 text-sm font-medium text-gray-700">
-        Scenario (optional)
-        <input
-          type="text"
-          maxLength={200}
-          placeholder="e.g. IT infrastructure team"
-          value={scenario}
-          onChange={(e) => setScenario(e.target.value)}
-          disabled={generating}
-          className="rounded-md border border-gray-300 px-2 py-1.5"
-        />
-      </label>
+      {showScenario ? (
+        <label className="text-sm text-gray-700">
+          <span className="sr-only">Scenario (optional)</span>
+          <input
+            type="text"
+            maxLength={200}
+            placeholder="Scenario, e.g. IT infrastructure team"
+            value={scenario}
+            onChange={(e) => setScenario(e.target.value)}
+            disabled={generating}
+            className="w-56 rounded-md border border-gray-300 px-2 py-1"
+          />
+        </label>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowScenario(true)}
+          className="text-sm text-gray-500 underline-offset-2 hover:underline"
+        >
+          Scenario…
+        </button>
+      )}
       <button
         type="submit"
         disabled={generating || disabled || !valid}
-        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {generating ? 'Generating…' : 'Generate emails'}
       </button>

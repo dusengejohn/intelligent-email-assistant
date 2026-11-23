@@ -31,7 +31,7 @@ uv run ruff check . && uv run ruff format .   # lint + format
 cd frontend
 npm install
 npm run dev                               # http://localhost:5173 (proxies /api to :8000)
-npm test                                  # frontend unit tests (Vitest)
+npm test                                  # frontend unit + component tests (Vitest, React Testing Library)
 
 # Or the full stack (from repo root)
 docker compose up --build                 # frontend :8080, backend :8000
