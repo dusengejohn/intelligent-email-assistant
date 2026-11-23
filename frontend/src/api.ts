@@ -35,8 +35,37 @@ export class ApiError extends Error {
   }
 }
 
-export function listEmails(): Promise<Email[]> {
-  return request<Email[]>('/api/emails')
+/** Counts for the sidebar views (GET /api/emails/summary). */
+export interface EmailSummary {
+  all: number
+  unclassified: number
+  classified: number
+  critical: number
+  high: number
+  moderate: number
+  low: number
+  handled: number
+  trash: number
+}
+
+/** Optional filters for the list; each sidebar view is one combination. */
+export interface EmailFilter {
+  priority?: Priority
+  classified?: boolean
+  trash?: boolean
+}
+
+export function listEmails(filter: EmailFilter = {}): Promise<Email[]> {
+  const params = new URLSearchParams()
+  if (filter.priority) params.set('priority', filter.priority)
+  if (filter.classified !== undefined) params.set('classified', String(filter.classified))
+  if (filter.trash) params.set('trash', 'true')
+  const query = params.toString()
+  return request<Email[]>(query ? `/api/emails?${query}` : '/api/emails')
+}
+
+export function getSummary(): Promise<EmailSummary> {
+  return request<EmailSummary>('/api/emails/summary')
 }
 
 export function generateEmails(count: number, scenario?: string): Promise<Email[]> {

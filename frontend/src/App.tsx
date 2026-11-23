@@ -3,15 +3,18 @@ import {
   ApiError,
   classifyEmails,
   generateEmails,
+  getSummary,
   listEmails,
   updateEmail,
   type Email,
+  type EmailSummary,
   type Priority,
 } from './api'
 import { EmailList } from './components/EmailList'
 import { ErrorBanner } from './components/ErrorBanner'
-import { Sidebar } from './components/Sidebar'
+import { Sidebar, ViewSelect } from './components/Sidebar'
 import { Toolbar } from './components/Toolbar'
+import { viewById, viewFromUrl, viewUrl, type ViewId } from './views'
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : 'Something went wrong. Please try again.'
@@ -19,7 +22,11 @@ function messageOf(err: unknown): string {
 
 function App() {
   // State: data the page remembers. Changing it redraws the page.
+  // The selected view starts from the URL (?view=critical), so refresh and links keep it.
+  const [view, setView] = useState<ViewId>(() => viewFromUrl(window.location.search))
+  const [reloadKey, setReloadKey] = useState(0) // bump it to reload list + counts
   const [emails, setEmails] = useState<Email[]>([])
+  const [summary, setSummary] = useState<EmailSummary | null>(null)
   const [loadingList, setLoadingList] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [classifying, setClassifying] = useState(false)
@@ -29,15 +36,49 @@ function App() {
   const [savingId, setSavingId] = useState<number | null>(null) // email whose priority is saving
   const [error, setError] = useState<string | null>(null)
 
-  const unclassified = emails.filter((e) => e.priority === null).length
+  const current = viewById(view)
+  const unclassified = summary?.unclassified ?? 0
 
-  // Runs once after the first render: load the stored emails
+  // Load the current view's emails and all counts, in parallel. Runs at start,
+  // when the view changes and after every change (reloadKey). `cancelled` drops a
+  // slow, outdated answer if the user already switched to another view.
   useEffect(() => {
-    listEmails()
-      .then(setEmails)
-      .catch((err: unknown) => setError(messageOf(err)))
-      .finally(() => setLoadingList(false))
+    let cancelled = false
+    Promise.all([listEmails(viewById(view).filter), getSummary()])
+      .then(([list, counts]) => {
+        if (cancelled) return
+        setEmails(list)
+        setSummary(counts)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(messageOf(err))
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingList(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [view, reloadKey])
+
+  // Browser Back/Forward: the URL changed, so follow it
+  useEffect(() => {
+    const onPopState = () => setView(viewFromUrl(window.location.search))
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
   }, [])
+
+  function selectView(id: ViewId) {
+    if (id === view) return
+    setLoadingList(true)
+    // pushState: changes the address without reloading, and adds a Back step
+    window.history.pushState(null, '', viewUrl(id))
+    setView(id)
+  }
+
+  function reload() {
+    setReloadKey((key) => key + 1)
+  }
 
   async function handleGenerate(count: number, scenario: string) {
     setGenerating(true)
@@ -45,7 +86,7 @@ function App() {
     setNotice(null)
     try {
       await generateEmails(count, scenario)
-      setEmails(await listEmails()) // refresh: show the new emails in list order
+      reload() // new emails: refresh the list and the counts
     } catch (err) {
       setError(messageOf(err)) // the existing list stays as it was
     } finally {
@@ -71,11 +112,7 @@ function App() {
       setError(messageOf(err))
     } finally {
       // Refresh even after an error: earlier requests may have saved results
-      try {
-        setEmails(await listEmails())
-      } catch {
-        // keep the current list; the error banner already explains the problem
-      }
+      reload()
       setClassifying(false)
     }
   }
@@ -84,11 +121,12 @@ function App() {
     setSavingId(id)
     setError(null)
     try {
-      // Confirmed update: show the server's version once it has saved it
-      const updated = await updateEmail(id, { priority })
-      setEmails((current) => current.map((e) => (e.id === id ? updated : e)))
+      await updateEmail(id, { priority })
+      // The email may move within the view, or leave it (e.g. Critical -> High),
+      // and the counts change: reload both instead of patching one row
+      reload()
     } catch (err) {
-      setError(messageOf(err)) // the card keeps its previous priority
+      setError(messageOf(err)) // the row keeps its previous priority
     } finally {
       setSavingId(null)
     }
@@ -121,12 +159,19 @@ function App() {
         </div>
       )}
       <div className="flex min-h-0 flex-1">
-        <Sidebar total={loadingList ? null : emails.length} />
-        <main className="min-w-0 flex-1 overflow-y-auto bg-white">
+        <Sidebar active={view} summary={summary} onSelect={selectView} />
+        {/* `relative` matters: each row has a screen-reader-only label (sr-only =
+            position: absolute). A scroll container only clips absolutely positioned
+            children if it is itself positioned; without it those labels stuck out
+            below the page and made the WHOLE page scroll into a long blank area. */}
+        <main data-testid="list-scroll" className="relative min-w-0 flex-1 overflow-y-auto bg-white">
+          <ViewSelect active={view} summary={summary} onSelect={selectView} />
           <EmailList
             emails={emails}
             loading={loadingList}
             savingId={savingId}
+            emptyText={current.empty}
+            readOnly={view === 'trash'}
             onPriorityChange={handlePriorityChange}
           />
         </main>

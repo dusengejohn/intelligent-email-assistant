@@ -6,18 +6,27 @@ interface Props {
   emails: Email[]
   loading: boolean
   savingId: number | null
+  emptyText: string // differs per view
+  readOnly?: boolean // Trash view
   onPriorityChange: (id: number, priority: Priority) => void
 }
 
 /** The rows in the order the API returns them (the server sorts; we never re-sort). */
-export function EmailList({ emails, loading, savingId, onPriorityChange }: Props) {
+export function EmailList({
+  emails,
+  loading,
+  savingId,
+  emptyText,
+  readOnly = false,
+  onPriorityChange,
+}: Props) {
   if (loading) {
     return <p className="p-6 text-sm text-gray-500">Loading emails…</p>
   }
   if (emails.length === 0) {
     return (
       <p className="m-6 rounded-lg border border-dashed border-gray-300 p-8 text-center text-gray-500">
-        No emails yet. Click Generate to create some.
+        {emptyText}
       </p>
     )
   }
@@ -43,6 +52,7 @@ export function EmailList({ emails, loading, savingId, onPriorityChange }: Props
             <EmailRow
               email={email}
               saving={savingId === email.id}
+              readOnly={readOnly}
               onPriorityChange={onPriorityChange}
             />
           </li>

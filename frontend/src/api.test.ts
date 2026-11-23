@@ -5,6 +5,7 @@ import {
   ApiError,
   classifyEmails,
   generateEmails,
+  getSummary,
   listEmails,
   updateEmail,
   type Email,
@@ -257,5 +258,30 @@ describe('updateEmail', () => {
 describe('priorities', () => {
   it('lists the four priorities, most urgent first (brief §7)', () => {
     expect(PRIORITY_ORDER).toEqual(['critical', 'high', 'moderate', 'low'])
+  })
+})
+
+describe('listEmails with a view filter', () => {
+  it.each([
+    [{ priority: 'critical' as const }, '/api/emails?priority=critical'],
+    [{ classified: false }, '/api/emails?classified=false'],
+    [{ classified: true }, '/api/emails?classified=true'],
+    [{ trash: true }, '/api/emails?trash=true'],
+  ])('builds the query string for %j', async (filter, url) => {
+    const mock = fakeFetch(jsonResponse(200, []))
+
+    await listEmails(filter)
+
+    expect(mock).toHaveBeenCalledWith(url, undefined)
+  })
+})
+
+describe('getSummary', () => {
+  it('loads the view counts', async () => {
+    const counts = { all: 3, unclassified: 1, classified: 2, critical: 1, high: 1, moderate: 0, low: 0, handled: 0, trash: 1 }
+    const mock = fakeFetch(jsonResponse(200, counts))
+
+    expect(await getSummary()).toEqual(counts)
+    expect(mock).toHaveBeenCalledWith('/api/emails/summary', undefined)
   })
 })

@@ -8,6 +8,8 @@ import { PriorityPicker } from './PriorityPicker'
 interface Props {
   email: Email
   saving: boolean
+  /** Trash view: no priority changes (the API refuses them for trashed emails) */
+  readOnly?: boolean
   onPriorityChange: (id: number, priority: Priority) => void
 }
 
@@ -18,7 +20,7 @@ interface Props {
  * New emails are bold; handled ones are greyed out (the API puts them last).
  * The picker and the reason tooltip stay here until the reading pane (story 3.6).
  */
-export function EmailRow({ email, saving, onPriorityChange }: Props) {
+export function EmailRow({ email, saving, readOnly = false, onPriorityChange }: Props) {
   const handled = email.status === 'handled'
   const accent = email.priority ? PRIORITIES[email.priority].color : '#D1D5DB'
   const strong = handled ? 'text-gray-600' : 'font-semibold text-gray-900'
@@ -45,11 +47,13 @@ export function EmailRow({ email, saving, onPriorityChange }: Props) {
         <span className="text-gray-500"> — {snippet(email.body)}</span>
       </p>
       <span className="ml-auto sm:ml-0">
-        <PriorityPicker
-          value={email.priority}
-          saving={saving}
-          onChange={(priority) => onPriorityChange(email.id, priority)}
-        />
+        {!readOnly && (
+          <PriorityPicker
+            value={email.priority}
+            saving={saving}
+            onChange={(priority) => onPriorityChange(email.id, priority)}
+          />
+        )}
       </span>
       <time dateTime={email.received_at} className="text-right text-xs text-gray-500">
         {listDate(email.received_at)}
