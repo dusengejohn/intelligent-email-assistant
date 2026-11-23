@@ -127,7 +127,9 @@ and GitHub/hosting secrets.
 | **Moderate** | Normal work requests, meeting coordination, reviews | 2–3 days | Yellow `#CA8A04` |
 | **Low** | FYI, newsletters, automated notifications, social | Whenever | Green `#16A34A` |
 
-Sort order everywhere: Critical → High → Moderate → Low, then newest first.
+Sort order everywhere: Critical → High → Moderate → Low, then newest first. Refined in Epic 3
+(#4, #62): new emails before handled ones (handled stay greyed out at the bottom), and
+unclassified emails first within each group.
 
 ## 8. Functional requirements by epic
 

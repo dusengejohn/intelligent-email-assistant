@@ -8,6 +8,7 @@ Generated emails pass two layers of validation:
 """
 
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from typing import Self
 
 from pydantic import (
@@ -187,3 +188,28 @@ class EmailUpdate(BaseModel):
             if getattr(self, name) is None:
                 raise ValueError(f"{name} cannot be null")
         return self
+
+
+# --- Inbox views (story 3.1) ---------------------------------------------------------
+
+
+class SortOrder(StrEnum):
+    PRIORITY = "priority"  # brief §7: new first, unclassified, critical -> low, newest
+    NEWEST = "newest"  # received time only
+
+
+class EmailSummary(BaseModel):
+    """Counts for the sidebar views (GET /api/emails/summary).
+
+    Every count includes handled emails (they stay in the lists, greyed out);
+    `handled` says how many of `all` are handled.
+    """
+
+    all: int
+    unclassified: int
+    classified: int
+    critical: int
+    high: int
+    moderate: int
+    low: int
+    handled: int
