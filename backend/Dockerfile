@@ -13,6 +13,9 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
+# Database migrations: the app runs them at startup (app/db.py migrate_database)
+COPY alembic.ini ./
+COPY migrations ./migrations
 
 # Run as an unprivileged user (least privilege). UID/GID 1000 match the default
 # WSL/Linux user, so files written to the ./data bind mount are owned by you, not

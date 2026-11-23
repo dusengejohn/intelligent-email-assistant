@@ -60,7 +60,7 @@ nginx (frontend container :80, host :8080)  ── serves static build, proxies 
 |---|---|
 | Backend | Python 3.12, FastAPI, Pydantic v2, `pydantic-settings` for config |
 | Python tooling | **uv** (`pyproject.toml` + `uv.lock`), ruff (lint + format), pytest, pre-commit |
-| Persistence | SQLite via **SQLModel** (or SQLAlchemy 2.x); file at `data/app.db` |
+| Persistence | SQLite via **SQLModel** (or SQLAlchemy 2.x); file at `data/app.db`; schema versioned with **Alembic** migrations (applied at startup) |
 | AI | Official `anthropic` Python SDK; model name from env `ANTHROPIC_MODEL` |
 | HTTP clients | `httpx` (weather), `feedparser` (RSS) |
 | Frontend | React + Vite + TypeScript, Tailwind CSS; plain `fetch` (no heavy state libs) |
