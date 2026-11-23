@@ -19,7 +19,10 @@ Guidance for Claude Code when working in this repository.
     `tests/data/labelled_emails.py` is the hand-labelled set for classifier tests.
 - `frontend/` — React + Vite + TypeScript + Tailwind, served by nginx in Docker; `/api/` is
   proxied to the backend (by Vite in dev, by nginx in Docker). `src/api.ts` is the typed
-  API client (Vitest: `src/api.test.ts`); UI pieces live in `src/components/`.
+  API client (Vitest: `src/api.test.ts`); UI pieces live in `src/components/`. Component tests
+  use React Testing Library in a simulated browser: a file opts in with
+  `// @vitest-environment jsdom` (others run in Node); shared setup in `src/test-setup.ts`.
+  The list header and rows share one grid template (`src/components/columns.ts`).
   `src/priorities.ts` mirrors `app/priorities.py` (labels, colors); the backend test
   `tests/test_frontend_priorities_sync.py` fails if they drift apart.
 - `data/` — SQLite database file (git-ignored).

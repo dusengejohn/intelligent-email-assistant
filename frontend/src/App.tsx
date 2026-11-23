@@ -10,8 +10,8 @@ import {
 } from './api'
 import { EmailList } from './components/EmailList'
 import { ErrorBanner } from './components/ErrorBanner'
-import { GenerateControls } from './components/GenerateControls'
-import { HealthPill } from './components/HealthPill'
+import { Sidebar } from './components/Sidebar'
+import { Toolbar } from './components/Toolbar'
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError ? err.message : 'Something went wrong. Please try again.'
@@ -29,8 +29,6 @@ function App() {
   const [savingId, setSavingId] = useState<number | null>(null) // email whose priority is saving
   const [error, setError] = useState<string | null>(null)
 
-  // Generate and Classify both change the list: never run them at the same time
-  const busy = generating || classifying
   const unclassified = emails.filter((e) => e.priority === null).length
 
   // Runs once after the first render: load the stored emails
@@ -96,52 +94,44 @@ function App() {
     }
   }
 
+  // Status line under the toolbar: progress, result of the last action, or a hint
+  const statusText = generating
+    ? 'Claude is writing your emails. This can take 15 seconds or more…'
+    : classifying
+      ? `Classifying… ${progress} of ${target}`
+      : (notice ?? `${unclassified} unclassified`)
+
+  // App shell: the page itself never scrolls (h-screen); only the list does.
+  // min-h-0 / min-w-0 let flex children shrink so overflow-y-auto can work.
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-10">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold text-gray-900">Intelligent Email Assistant</h1>
-        <HealthPill />
-      </header>
-
-      <section className="flex flex-col gap-2">
-        <GenerateControls generating={generating} disabled={classifying} onGenerate={handleGenerate} />
-        {generating && (
-          <p className="text-sm text-gray-500">
-            Claude is writing your emails. This can take 15 seconds or more…
-          </p>
-        )}
-      </section>
-
-      <section className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={handleClassify}
-          disabled={busy || loadingList}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {classifying ? 'Classifying…' : 'Classify'}
-        </button>
-        <p className="text-sm text-gray-600" role="status">
-          {classifying
-            ? `Classifying… ${progress} of ${target}`
-            : (notice ?? `${unclassified} unclassified`)}
-        </p>
-      </section>
-
-      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold text-gray-900">
-          Emails {!loadingList && <span className="text-gray-500">({emails.length})</span>}
-        </h2>
-        <EmailList
-          emails={emails}
-          loading={loadingList}
-          savingId={savingId}
-          onPriorityChange={handlePriorityChange}
-        />
-      </section>
-    </main>
+    <div className="flex h-screen flex-col bg-gray-50">
+      <Toolbar
+        generating={generating}
+        classifying={classifying}
+        loadingList={loadingList}
+        onGenerate={handleGenerate}
+        onClassify={handleClassify}
+      />
+      <p className="border-b border-gray-200 bg-white px-4 py-1 text-xs text-gray-600" role="status">
+        {statusText}
+      </p>
+      {error && (
+        <div className="px-4 pt-3">
+          <ErrorBanner message={error} onDismiss={() => setError(null)} />
+        </div>
+      )}
+      <div className="flex min-h-0 flex-1">
+        <Sidebar total={loadingList ? null : emails.length} />
+        <main className="min-w-0 flex-1 overflow-y-auto bg-white">
+          <EmailList
+            emails={emails}
+            loading={loadingList}
+            savingId={savingId}
+            onPriorityChange={handlePriorityChange}
+          />
+        </main>
+      </div>
+    </div>
   )
 }
 
