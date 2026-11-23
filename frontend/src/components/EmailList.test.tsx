@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-// The list: a sticky column header, and rows that share the header's columns.
+// The list: a sticky column header, rows on the header's columns, the Trash bar.
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Email } from '../api'
 import { COLUMNS } from './columns'
@@ -25,20 +26,17 @@ function email(id: number, priority: Email['priority'], source: Email['classific
 }
 
 // Badges of very different widths: with content-sized parts, the columns drifted apart
-const EMAILS = [
-  email(1, 'critical', 'ai'),
-  email(2, 'moderate', 'fallback'),
-  email(3, null, null),
-]
+const EMAILS = [email(1, 'critical', 'ai'), email(2, 'moderate', 'fallback'), email(3, null, null)]
 
-function renderList() {
+function renderList(props: Partial<Parameters<typeof EmailList>[0]> = {}) {
   render(
     <EmailList
       emails={EMAILS}
       loading={false}
-      savingId={null}
       emptyText="No emails yet."
-      onPriorityChange={vi.fn()}
+      selectedId={null}
+      onSelect={vi.fn()}
+      {...props}
     />,
   )
 }
@@ -61,23 +59,28 @@ describe('EmailList', () => {
     const rows = screen.getAllByRole('listitem').map((item) => item.firstElementChild)
     expect(rows).toHaveLength(3)
     for (const element of [header, ...rows]) {
-      // Same column template => sender, subject and date line up on every row,
-      // whatever the width of the badge
       expect(element?.className).toContain(COLUMNS)
     }
   })
 
   it('has no header when the list is empty', () => {
-    render(
-      <EmailList
-        emails={[]}
-        loading={false}
-        savingId={null}
-        emptyText="No emails yet."
-        onPriorityChange={vi.fn()}
-      />,
-    )
+    renderList({ emails: [] })
 
     expect(screen.queryByTestId('list-header')).not.toBeInTheDocument()
+    expect(screen.getByText('No emails yet.')).toBeInTheDocument()
+  })
+
+  it('offers "Empty trash" only in the Trash view', async () => {
+    const onEmptyTrash = vi.fn()
+    renderList({ onEmptyTrash })
+
+    await userEvent.click(screen.getByRole('button', { name: /Empty trash/ }))
+    expect(onEmptyTrash).toHaveBeenCalled()
+  })
+
+  it('has no "Empty trash" button in normal views', () => {
+    renderList()
+
+    expect(screen.queryByRole('button', { name: /Empty trash/ })).not.toBeInTheDocument()
   })
 })
