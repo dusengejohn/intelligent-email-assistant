@@ -11,6 +11,8 @@ Guidance for Claude Code when working in this repository.
   - `app/services/` — `ai_client.py` (the only Claude caller), `prompts.py`,
     `generator.py`, `classifier.py` (AI in batches + per-email fallback),
     `fallback.py` (rule-based classifier, no AI), `errors.py`;
+  - `scripts/` — developer tools run by hand, never in CI (`uv run python -m scripts.<name>`),
+    e.g. `eval_classifier.py` (AI vs rules accuracy; calls the real API);
   - `tests/` mirrors `app/`; `tests/fakes.py` holds the shared `FakeAI`;
     `tests/data/labelled_emails.py` is the hand-labelled set for classifier tests.
 - `frontend/` — React + Vite + TypeScript + Tailwind, served by nginx in Docker; `/api/` is

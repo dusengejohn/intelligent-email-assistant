@@ -62,6 +62,10 @@ from any claude.ai subscription. Everything else (the list, tests, CI) works wit
 - **Tests and CI never call Claude** and need no key: the AI client is replaced by a fake
   (`backend/tests/fakes.py`), and GitHub has no API key secret on purpose.
 
+**Measure classifier quality** (manual, never in CI, ~$0.001 per run with a key):
+`cd backend && uv run python -m scripts.eval_classifier --runs 3`. Results and caveats:
+[docs/testing/epic-2-eval.md](docs/testing/epic-2-eval.md).
+
 **Generate emails:** open http://localhost:8080 (Docker) or http://localhost:5173 (dev),
 choose 1–50 and click **Generate emails**; or use the API docs at
 http://localhost:8000/docs (`POST /api/emails/generate` → *Try it out*).
