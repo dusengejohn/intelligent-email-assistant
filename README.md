@@ -1,8 +1,8 @@
 # intelligent-email-assistant
 
 A small full-stack app for learning AI + modern SDLC: it generates realistic (fictional)
-workplace emails with Claude and lists them. Classification, a dashboard and calendar
-planning follow in later epics ([project brief](docs/PROJECT_BRIEF.md)).
+workplace emails with Claude and classifies them by priority (Claude, with keyword rules
+as a fallback). A dashboard and calendar planning follow in later epics ([project brief](docs/PROJECT_BRIEF.md)).
 
 ## Prerequisites
 Developed in WSL (Ubuntu) + VS Code. Install these **inside WSL**, not on Windows:
@@ -39,8 +39,9 @@ docker compose up --build                 # frontend :8080, backend :8000
 
 ## Using Claude (API key and cost)
 
-Generating emails calls the **Claude API**, which is **pay-as-you-go** and billed separately
-from any claude.ai subscription. Everything else (the list, tests, CI) works without a key.
+Generating and classifying emails call the **Claude API**, which is **pay-as-you-go** and
+billed separately from any claude.ai subscription. Everything else (the list, manual
+priorities, tests, CI) works without a key, and classification falls back to keyword rules.
 
 1. In the [Anthropic Console](https://console.anthropic.com): add a few dollars of credit
    (Billing) and **set a monthly spend limit** (Settings → Limits) first.
@@ -55,12 +56,22 @@ from any claude.ai subscription. Everything else (the list, tests, CI) works wit
 |---|---|
 | Generate 10 emails (1 Claude call, ~15 s) | about **$0.0015** |
 | Generate 50 emails (5 calls, ~60–80 s) | about **$0.007** |
+| Classify 20 emails (1 call, ~5–10 s) | about **$0.0008** |
+| Classify 105 emails (one click = 3 requests, ~26 s) | about **$0.008** |
 
 - Every call logs its tokens: `docker compose logs backend | grep "Claude call"`.
 - No key → the app still works; **Generate** shows *"AI is not configured: set
-  ANTHROPIC_API_KEY in .env"* (HTTP 503).
+  ANTHROPIC_API_KEY in .env"* (HTTP 503), and **Classify** uses the keyword rules (HTTP 200).
 - **Tests and CI never call Claude** and need no key: the AI client is replaced by a fake
   (`backend/tests/fakes.py`), and GitHub has no API key secret on purpose.
+
+**Classify emails:** click **Classify**. One click classifies every unclassified email
+(the UI repeats the request, 50 emails at a time). Each card shows a colored priority
+badge, its source (`AI`, `rules` or `manual`) and a one-sentence reason. The result line
+says how many came from the AI and how many from the rules: **"by rules" while a key is
+set means Claude was unreachable** (see the troubleshooting table in
+[docs/REQUEST_FLOW.md](docs/REQUEST_FLOW.md)). Change a priority with the dropdown on a
+card: it becomes `manual` and is never overwritten by later classifications.
 
 **Measure classifier quality** (manual, never in CI, ~$0.001 per run with a key):
 `cd backend && uv run python -m scripts.eval_classifier --runs 3`. Results and caveats:
@@ -118,9 +129,10 @@ The SQLite database lives in `data/app.db`, shared by local runs and Docker
 .github/                   CI (backend, frontend, docker jobs), Dependabot, PR/issue templates
 backend/app/               FastAPI app: main.py, config, db, models, schemas
   routers/                 API endpoints (health, emails)
-  services/                Claude client, prompts, email generator
+  services/                Claude client, prompts, generator, classifier, fallback rules
+backend/scripts/           Manual developer tools (classifier eval; never in CI)
 backend/tests/             pytest (fakes.py = fake Claude client)
-frontend/src/              React app: App.tsx, api.ts (typed API client), components/
+frontend/src/              React app: App.tsx, api.ts (typed API client), priorities.ts, components/
 docs/                      Brief, request flow, test checklists (docs/testing/)
 data/                      SQLite file (git-ignored)
 ```
@@ -142,5 +154,5 @@ Claude Code slash commands: `/story <issue>`, `/new-endpoint <description>`,
 
 Project requirements and working agreement: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md).
 How the frontend reaches the backend, the healthcheck, and the generate flow (with
-timeouts): [docs/REQUEST_FLOW.md](docs/REQUEST_FLOW.md). Epic 1 end-to-end test log:
-[docs/testing/epic-1.md](docs/testing/epic-1.md).
+timeouts): [docs/REQUEST_FLOW.md](docs/REQUEST_FLOW.md). End-to-end test logs:
+[docs/testing/epic-1.md](docs/testing/epic-1.md), [docs/testing/epic-2.md](docs/testing/epic-2.md).

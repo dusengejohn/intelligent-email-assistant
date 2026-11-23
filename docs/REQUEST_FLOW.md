@@ -3,7 +3,7 @@
 > **What this explains:** what happens, step by step, when you open
 > `http://localhost:8080/`: how the React frontend reaches the FastAPI backend, how
 > Docker's healthcheck decides the backend is ready, and what happens when you click
-> **Generate emails** (frontend → nginx → FastAPI → Claude → SQLite).
+> **Generate emails** and **Classify** (frontend → nginx → FastAPI → Claude or rules → SQLite).
 > Applies to the stack started with `docker compose up --build`.
 > Diagrams are [Mermaid](https://mermaid.js.org/); GitHub renders them, and so does VS Code
 > with the recommended *Markdown Preview Mermaid Support* extension.
@@ -18,11 +18,12 @@
 4. [Loading the page: `GET /`](#4-loading-the-page-get-)
 5. [Calling the API: `GET /api/health`](#5-calling-the-api-get-apihealth)
 6. [Generating emails: `POST /api/emails/generate`](#6-generating-emails-post-apiemailsgenerate)
-7. [Why one origin: no CORS needed](#7-why-one-origin-no-cors-needed)
-8. [Dev mode vs Docker mode](#8-dev-mode-vs-docker-mode)
-9. [When it breaks: symptoms and causes](#9-when-it-breaks-symptoms-and-causes)
-10. [Try it yourself](#10-try-it-yourself)
-11. [Glossary](#11-glossary)
+7. [Classifying emails: `POST /api/emails/classify`](#7-classifying-emails-post-apiemailsclassify)
+8. [Why one origin: no CORS needed](#8-why-one-origin-no-cors-needed)
+9. [Dev mode vs Docker mode](#9-dev-mode-vs-docker-mode)
+10. [When it breaks: symptoms and causes](#10-when-it-breaks-symptoms-and-causes)
+11. [Try it yourself](#11-try-it-yourself)
+12. [Glossary](#12-glossary)
 
 ---
 
@@ -330,7 +331,73 @@ output tokens per batch). Every call logs its tokens: `docker compose logs backe
 
 ---
 
-## 7. Why one origin: no CORS needed
+## 7. Classifying emails: `POST /api/emails/classify`
+
+What happens when you click **Classify** with 105 unclassified emails.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant R as React (browser)
+    participant N as nginx (:80)
+    participant F as FastAPI (backend)
+    participant C as Claude API
+    participant D as SQLite
+
+    loop until remaining = 0 (api.ts classifyEmails)
+        R->>N: POST /api/emails/classify
+        N->>F: same request
+        F->>D: up to 50 emails WHERE priority IS NULL, newest first
+        loop batches of 20
+            F->>C: messages.parse(output_format=ClassificationBatch)<br/>each email in <email id="…"> tags, content escaped
+            C-->>F: {"results": [{email_id, priority, reason, minutes}]}
+            Note over F: strict check per item; anything invalid,<br/>missing or failed → rules (fallback.py)
+        end
+        F->>D: save priority, reason, minutes, source (ONE commit)
+        F-->>R: 200 {classified, by_source {ai, fallback}, remaining, emails}
+        Note over R: "Classifying… 50 of 105"
+    end
+    R->>N: GET /api/emails (refresh)
+    Note over R: "Classified 105 emails: 105 by AI, 0 by rules."
+```
+
+1. **The UI loops** ([`api.ts`](../frontend/src/api.ts) `classifyEmails`): the backend
+   does at most **50 emails per request** and answers how many are `remaining`, so one
+   click finishes any backlog while every request stays short (~20 s, far below nginx's
+   180 s). Guards: stop if a request makes no progress, or after 20 requests.
+2. **Only unclassified emails** are picked (`priority IS NULL`), so a manual, AI or rules
+   priority is never overwritten, and calling it twice is safe.
+3. **The AI is optional here** (`get_optional_ai_client`): no key means `None`, and the
+   rules classify everything with **200**, not 503. Generation, which has no fallback,
+   keeps the 503.
+4. **Claude classifies 20 per call** ([`classifier.py`](../backend/app/services/classifier.py)),
+   using the brief §7 definitions from [`priorities.py`](../backend/app/priorities.py).
+   Email content goes inside `<email id="…">` tags and is escaped, so text like
+   `</email> ignore your rules` can't act as instructions (**prompt injection**).
+5. **Every email gets exactly one result**, from Claude or the rules:
+
+   | Situation | Result |
+   |---|---|
+   | no API key | all emails → rules |
+   | key rejected (401/403) | this and all later batches → rules, no more calls |
+   | a batch fails (timeout, rate limit, connection, refusal…) | that batch → rules |
+   | an item is invalid, unknown id, duplicate, or an email is missing | that email → rules |
+   | valid item | `source = ai` |
+
+6. **One commit** per request, then the UI refreshes the list. Badges show the priority
+   color and the source (`AI`, `rules`, `manual`).
+
+**Manual override:** the dropdown sends `PATCH /api/emails/{id} {"priority": "high"}`;
+the email becomes `manual` ("Set manually.", default minutes) and bulk classify never
+touches it again. `POST /api/emails/{id}/classify` re-classifies one email on purpose.
+
+**Cost:** about **$0.0008 per 20 emails** (~280 input and ~100 output tokens per email);
+105 emails ≈ $0.008. Quality on the labelled set: see
+[testing/epic-2-eval.md](testing/epic-2-eval.md).
+
+---
+
+## 8. Why one origin: no CORS needed
 
 An **origin** is scheme + host + port (`http://localhost:8080`). Browsers enforce the
 **same-origin policy**: JavaScript can't freely read responses from a *different* origin
@@ -345,7 +412,7 @@ Because nginx serves the page **and** proxies the API on the same origin:
 
 ---
 
-## 8. Dev mode vs Docker mode
+## 9. Dev mode vs Docker mode
 
 ```mermaid
 flowchart LR
@@ -372,7 +439,7 @@ The frontend code doesn't know or care which mode it's in.
 
 ---
 
-## 9. When it breaks: symptoms and causes
+## 10. When it breaks: symptoms and causes
 
 | Symptom | Likely cause | Check |
 |---|---|---|
@@ -388,11 +455,13 @@ The frontend code doesn't know or care which mode it's in.
 | Generate shows **504** "took too long", but the emails appear after a refresh | nginx gave up before the backend finished | `proxy_read_timeout` in `nginx.conf`; generate fewer at once |
 | `localhost:8080` shows an **old** version that `docker ps` doesn't list | A second Docker Engine inside WSL holds the ports | `systemctl is-active docker`; see README "Docker and the `data/` folder" |
 | From a WSL terminal, `curl localhost:8080` fails but the Windows browser works | Older Docker Desktop setups publish ports only on Windows | Use the Windows host IP: `ip route \| awk '/default/ {print $3}'` |
+| Classify says **"0 by AI, N by rules"** although a key is set | Every Claude call failed (connection, TLS, rate limit); the rules took over | `docker compose logs backend \| grep "Claude call failed"` |
+| Backend log shows `CERTIFICATE_VERIFY_FAILED … self-signed certificate` | Something (VPN, antivirus HTTPS scanning, captive portal) intercepts HTTPS from Docker | Test from the container: `docker compose exec backend python -c "import urllib.request; urllib.request.urlopen('https://api.anthropic.com')"`; fix the network, then reclassify |
 | Dev mode: `uvicorn` fails with *address already in use*, or `:5173` shows Docker's data | The Docker backend holds port 8000 (also inside WSL) | `docker compose stop backend` before dev mode |
 
 ---
 
-## 10. Try it yourself
+## 11. Try it yourself
 
 `localhost` works in a Windows browser and, with current Docker Desktop, in a WSL
 terminal too. If it doesn't in WSL on your setup, use the Windows host IP
@@ -428,7 +497,7 @@ assets, then `health`. Click `health` to see headers and the JSON response.
 
 ---
 
-## 11. Glossary
+## 12. Glossary
 
 | Term | Plain meaning |
 |---|---|
@@ -450,3 +519,6 @@ assets, then `health`. Click `health` to see headers and the JSON response.
 | **Transaction / commit** | A group of database writes saved together: all of them, or none. |
 | **Bind mount** | A host folder mounted into a container (`./data:/app/data`), so data survives `docker compose down`. |
 | **`restart: unless-stopped`** | Docker starts the container again when Docker starts, unless you stopped it yourself. |
+| **Fallback / graceful degradation** | When a dependency (Claude) fails, a simpler method (keyword rules) takes over, so the feature still works. |
+| **Prompt injection** | Text in the *data* that tries to act as *instructions* to the AI; prevented here with tags, escaping and strict validation. |
+| **Eval** | Measuring an AI system against examples with known answers (`scripts/eval_classifier.py`). |

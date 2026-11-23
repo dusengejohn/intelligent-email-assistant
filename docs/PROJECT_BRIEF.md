@@ -2,7 +2,7 @@
 
 > **Purpose of this file:** the single source of truth for *what* this project must do,
 > *why*, and *how* it is built. Claude Code: read this before planning any work.
-> Owner: John Dusenge · Repo: `dusengejohn/intelligent-email-assistant` · Last updated: 2026-11-21
+> Owner: John Dusenge · Repo: `dusengejohn/intelligent-email-assistant` · Last updated: 2026-11-23
 
 ---
 
@@ -147,7 +147,7 @@ Sort order everywhere: Critical → High → Moderate → Low, then newest first
 - Saved to SQLite; returns created emails. Missing API key → HTTP 503 with clear message.
 - `GET /api/emails?priority=&status=` and `GET /api/emails/{id}`.
 
-### Epic 2 — Priority classification (AI + fallback)
+### Epic 2 — Priority classification (AI + fallback) (done)
 - `POST /api/emails/classify` classifies all unclassified emails (also `/api/emails/{id}/classify`).
 - AI returns per email: `{ "priority", "reason", "suggested_response_minutes" }` — validated.
 - **Fallback classifier** (pure Python keyword/rule based) used when the API is missing,
@@ -223,7 +223,7 @@ Sort order everywhere: Critical → High → Moderate → Low, then newest first
 6. README / CLAUDE.md / this brief updated if behaviour, commands or decisions changed.
 7. I (John) have read and understood the code.
 
-## 12. Current status (2026-11-21)
+## 12. Current status (2026-11-23)
 
 - ✅ Repo structure, README, CLAUDE.md, `.gitignore`, `.env.example`, `.gitattributes`
 - ✅ Backend: `GET /api/health` (under `APIRouter(prefix="/api")`) + test; uv/pyproject/uv.lock; ruff config
@@ -250,11 +250,28 @@ Sort order everywhere: Critical → High → Moderate → Low, then newest first
 - ✅ React UI with Tailwind: Generate button, email list, loading/error/empty states; Vitest in CI (#33)
 - ✅ Docker end to end: nginx `proxy_read_timeout` 180 s, `restart: unless-stopped`, `nginx -t` in CI,
   persistence across `down`/`up` verified (#34)
-- ⬜ Follow-up: browser re-check of `docs/testing/epic-1.md` rows 4.5, 6.1, 6.2 (verified with curl, not yet in the browser)
+- ✅ Follow-up: browser rows 4.5, 6.1, 6.2 of `docs/testing/epic-1.md` completed on 2026-11-23 (#52)
 - Decisions: no demo mode (real API for manual tests, fully mocked tests; #35 closed);
   invalid AI emails are skipped, no top-up; use Docker Desktop only (no second engine in WSL)
 - Known limit: 50 emails = 5 *sequential* Claude calls (~60–80 s). Parallel batches would
   cut this to ~15 s; candidate for a later story.
+
+**Epic 2 — Priority classification: done** (#46–#52, test logs: `docs/testing/epic-2.md`,
+`docs/testing/epic-2-eval.md`)
+- ✅ Brief §7 as code (`app/priorities.py`, mirrored in `frontend/src/priorities.ts` with a sync test);
+  rule-based fallback classifier + 23 hand-labelled emails (#46)
+- ✅ AI classifier: batches of 20, ids matched, per-email fallback, prompt-injection escaping,
+  stops after a rejected key (#47)
+- ✅ `POST /api/emails/classify` (≤ 50 per request, `remaining`), `/{id}/classify`; no key → rules, 200 (#48)
+- ✅ `PATCH /api/emails/{id}`: manual priority (never overwritten) and status (#49)
+- ✅ UI: Classify button (loops until done, progress, AI vs rules count), badges, reasons, dropdown (#50)
+- ✅ Eval script: Claude 83-91 % on the labelled set, no critical missed; rules 96 % but optimistic (#51)
+- ✅ Docker end to end with and without a key, manual priorities survive `down`/`up` (#52)
+- Decisions: classification never fails because of the AI (graceful degradation); fallback per
+  email; manual priorities win; quality is measured with an eval, not guessed
+- Known limits: AI and rules disagree on ~half of the generated emails; classify is sequential
+  (~20 s per 50 emails); the eval is time-dependent and its labels are debatable (see eval doc);
+  generated emails repeat; HTTPS interception on the machine can force the fallback
 
 ## 13. Roadmap
 
