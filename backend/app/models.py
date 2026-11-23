@@ -76,3 +76,6 @@ class Email(SQLModel, table=True):
 
     status: EmailStatus = EmailStatus.NEW
     created_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime)
+    # Soft delete (story 3.3): set when moved to the Trash, None while active.
+    # Trashed emails are hidden everywhere except the Trash view.
+    deleted_at: datetime | None = Field(default=None, sa_type=UTCDateTime)

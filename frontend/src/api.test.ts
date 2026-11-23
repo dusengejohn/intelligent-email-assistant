@@ -24,6 +24,7 @@ const EMAIL: Email = {
   suggested_response_minutes: null,
   status: 'new',
   created_at: '2026-11-17T19:05:00Z',
+  deleted_at: null,
 }
 
 function jsonResponse(status: number, body: unknown): Response {

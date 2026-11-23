@@ -20,6 +20,8 @@ export interface Email {
   suggested_response_minutes: number | null
   status: EmailStatus
   created_at: string
+  /** Set when the email is in the Trash (soft delete); null while active. */
+  deleted_at: string | null
 }
 
 /** A failed request. `message` is safe to show to the user; `status` 0 = no response. */

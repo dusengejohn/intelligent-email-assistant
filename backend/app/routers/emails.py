@@ -1,9 +1,11 @@
 """Email endpoints: /api/emails/..."""
 
+import logging
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import case
+from sqlalchemy import ColumnElement, case, delete
 from sqlmodel import Session, col, func, select
 
 from app.db import get_session
@@ -15,6 +17,7 @@ from app.schemas import (
     EmailRead,
     EmailSummary,
     EmailUpdate,
+    EmptyTrashResult,
     GenerateRequest,
     SortOrder,
     SourceCounts,
@@ -23,6 +26,7 @@ from app.services.ai_client import AIClient, get_ai_client, get_optional_ai_clie
 from app.services.classifier import classify_emails
 from app.services.generator import generate_emails
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/emails", tags=["emails"])
 
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -83,15 +87,36 @@ def _newest_order() -> list:
     return [col(Email.received_at).desc(), col(Email.id).desc()]
 
 
+# --- Soft delete (story 3.3): ONE place for "not in the Trash" -------------------------
+
+
+def _active() -> ColumnElement[bool]:
+    """Filter for emails that are NOT in the Trash. Every query except the Trash
+    view and GET /{id} uses it, so a trashed email is invisible everywhere else."""
+    return col(Email.deleted_at).is_(None)
+
+
+def _in_trash() -> ColumnElement[bool]:
+    return col(Email.deleted_at).is_not(None)
+
+
+def _get_or_404(session: Session, email_id: int, *, trashed: bool = False) -> Email:
+    """The email with this id, or 404. trashed=False: must be active; True: in the Trash."""
+    email = session.get(Email, email_id)
+    if email is None or (email.deleted_at is not None) != trashed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
+    return email
+
+
 # Declared BEFORE "/{email_id}": FastAPI tries routes in order, and the pattern
 # would otherwise read "summary" as an email id (and answer 422).
 @router.get("/summary", response_model=EmailSummary, summary="Counts for the inbox views")
 def email_summary(session: SessionDep) -> EmailSummary:
     # One query: count emails per (priority, status) group, then add the groups up
     rows = session.exec(
-        select(Email.priority, Email.status, func.count()).group_by(
-            col(Email.priority), col(Email.status)
-        )
+        select(Email.priority, Email.status, func.count())
+        .where(_active())
+        .group_by(col(Email.priority), col(Email.status))
     ).all()
     counts = dict.fromkeys(EmailSummary.model_fields, 0)
     for priority, email_status, n in rows:
@@ -101,6 +126,7 @@ def email_summary(session: SessionDep) -> EmailSummary:
             counts[priority.value] += n
         if email_status == EmailStatus.HANDLED:
             counts["handled"] += n
+    counts["trash"] = session.exec(select(func.count()).select_from(Email).where(_in_trash())).one()
     return EmailSummary(**counts)
 
 
@@ -113,11 +139,12 @@ def list_emails(
     priority: Priority | None = None,
     classified: bool | None = None,
     sort: SortOrder = SortOrder.PRIORITY,
+    trash: Annotated[bool, Query(description="true: only the Trash, newest deleted first")] = False,
 ) -> list[Email]:
     # Typed as enums/bools: FastAPI rejects unknown values with 422 and lists the
     # allowed ones in /docs. Filters are added only when given; each sidebar view
     # is one combination of them.
-    query = select(Email)
+    query = select(Email).where(_in_trash() if trash else _active())
     if email_status is not None:
         query = query.where(Email.status == email_status)
     if priority is not None:
@@ -125,8 +152,24 @@ def list_emails(
     if classified is not None:
         has_priority = col(Email.priority).is_not(None)
         query = query.where(has_priority if classified else col(Email.priority).is_(None))
-    order = _priority_order() if sort == SortOrder.PRIORITY else _newest_order()
+    if trash:  # like a real Trash: most recently deleted first
+        order = [col(Email.deleted_at).desc(), col(Email.id).desc()]
+    elif sort == SortOrder.PRIORITY:
+        order = _priority_order()
+    else:
+        order = _newest_order()
     return list(session.exec(query.order_by(*order)))
+
+
+# Declared BEFORE "DELETE /{email_id}", or "trash" would be read as an email id (422)
+@router.delete("/trash", response_model=EmptyTrashResult, summary="Empty the Trash (permanent)")
+def empty_trash(session: SessionDep) -> EmptyTrashResult:
+    # The only irreversible delete: the UI asks for confirmation first (story 3.6)
+    result = session.exec(delete(Email).where(_in_trash()))  # type: ignore[call-overload]
+    session.commit()
+    deleted = result.rowcount or 0
+    logger.info("Emptied the Trash: %d emails permanently deleted", deleted)
+    return EmptyTrashResult(deleted=deleted)
 
 
 @router.get(
@@ -136,6 +179,7 @@ def list_emails(
     responses={404: {"description": "Email not found"}},
 )
 def get_email(email_id: int, session: SessionDep) -> Email:
+    # Also returns a trashed email (deleted_at set): the reading pane shows it
     email = session.get(Email, email_id)
     if email is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
@@ -150,7 +194,7 @@ def _apply(email: Email, classification: Classification) -> None:
 
 
 def _unclassified_count(session: Session) -> int:
-    query = select(func.count()).select_from(Email).where(col(Email.priority).is_(None))
+    query = select(func.count()).select_from(Email).where(col(Email.priority).is_(None), _active())
     return session.exec(query).one()
 
 
@@ -165,7 +209,7 @@ def classify_unclassified(session: SessionDep, ai: OptionalAIDep) -> ClassifyRes
     # harmless (last save wins) for a single-user app.
     query = (
         select(Email)
-        .where(col(Email.priority).is_(None))
+        .where(col(Email.priority).is_(None), _active())  # never send trashed emails to Claude
         .order_by(*_newest_order())
         .limit(CLASSIFY_LIMIT)
     )
@@ -199,10 +243,8 @@ def classify_unclassified(session: SessionDep, ai: OptionalAIDep) -> ClassifyRes
 )
 def classify_one(email_id: int, session: SessionDep, ai: OptionalAIDep) -> Email:
     # Explicit request for one email: re-classify even if it already has a
-    # priority (including a manual one)
-    email = session.get(Email, email_id)
-    if email is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
+    # priority (including a manual one). Not for trashed emails.
+    email = _get_or_404(session, email_id)
     _apply(email, classify_emails([email], ai)[email_id])
     session.add(email)
     session.commit()
@@ -220,10 +262,9 @@ MANUAL_REASON = "Set manually."
     responses={404: {"description": "Email not found"}},
 )
 def update_email(email_id: int, update: EmailUpdate, session: SessionDep) -> Email:
-    # PATCH = partial update: only the fields that were sent are changed
-    email = session.get(Email, email_id)
-    if email is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found")
+    # PATCH = partial update: only the fields that were sent are changed.
+    # Trashed emails can't be changed (restore them first).
+    email = _get_or_404(session, email_id)
 
     if update.priority is not None:
         # The person's decision wins: marked manual, so bulk classify never touches it
@@ -237,4 +278,35 @@ def update_email(email_id: int, update: EmailUpdate, session: SessionDep) -> Ema
     session.add(email)
     session.commit()
     session.refresh(email)
+    return email
+
+
+@router.delete(
+    "/{email_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Move an email to the Trash (can be restored)",
+    responses={404: {"description": "Email not found (or already in the Trash)"}},
+)
+def delete_email(email_id: int, session: SessionDep) -> None:
+    # Soft delete: only mark it; DELETE /trash removes it for good
+    email = _get_or_404(session, email_id)
+    email.deleted_at = datetime.now(UTC)
+    session.add(email)
+    session.commit()
+    logger.info("Moved email %d to the Trash", email_id)
+
+
+@router.post(
+    "/{email_id}/restore",
+    response_model=EmailRead,
+    summary="Restore an email from the Trash",
+    responses={404: {"description": "Email not found in the Trash"}},
+)
+def restore_email(email_id: int, session: SessionDep) -> Email:
+    email = _get_or_404(session, email_id, trashed=True)
+    email.deleted_at = None  # every other field was kept, so it comes back unchanged
+    session.add(email)
+    session.commit()
+    session.refresh(email)
+    logger.info("Restored email %d from the Trash", email_id)
     return email
