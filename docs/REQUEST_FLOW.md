@@ -281,7 +281,7 @@ sequenceDiagram
     F-->>N: 201 [EmailRead, ...] (~60–80 s after the click)
     N-->>R: 201
     R->>N: GET /api/emails (refresh the list)
-    N-->>R: 200 [all emails, newest first]
+    N-->>R: 200 [all emails, priority order]
 ```
 
 1. **React** ([`App.tsx`](../frontend/src/App.tsx) → [`api.ts`](../frontend/src/api.ts))
@@ -301,7 +301,9 @@ sequenceDiagram
    counts, never content). So 50 requested can return a few less (e.g. 45).
 6. **One transaction:** Claude runs *before* the database is touched, then all emails are
    saved with one `commit()`. An AI failure can never leave half-saved data.
-7. **The UI refreshes the list** with `GET /api/emails`, sorted newest first.
+7. **The UI refreshes the list** with `GET /api/emails`, in priority order (new before
+   handled; unclassified first, then critical → low; newest first within each).
+   `?sort=newest` gives plain newest-first; `GET /api/emails/summary` returns the view counts.
 
 ### Every layer has a timeout: the shortest one wins
 
@@ -489,7 +491,8 @@ curl -I localhost:8080/api/health # HEAD → 405 from FastAPI
 # Generate 2 emails through nginx (costs ~$0.0003) and watch the token log
 curl -X POST localhost:8080/api/emails/generate -H 'Content-Type: application/json' -d '{"count": 2}'
 docker compose logs backend | grep -E "Claude call|Generated"
-curl localhost:8080/api/emails     # all stored emails, newest first
+curl localhost:8080/api/emails     # all stored emails, priority order
+curl localhost:8080/api/emails/summary   # counts per view
 ```
 
 In the browser: **F12 → Network**, reload, and look for `index.html`, the `.js`/`.css`

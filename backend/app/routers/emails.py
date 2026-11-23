@@ -3,6 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import case
 from sqlmodel import Session, col, func, select
 
 from app.db import get_session
@@ -12,8 +13,10 @@ from app.schemas import (
     Classification,
     ClassifyResult,
     EmailRead,
+    EmailSummary,
     EmailUpdate,
     GenerateRequest,
+    SortOrder,
     SourceCounts,
 )
 from app.services.ai_client import AIClient, get_ai_client, get_optional_ai_client
@@ -58,24 +61,72 @@ def generate(request: GenerateRequest, session: SessionDep, ai: AIDep) -> list[E
     return emails
 
 
-@router.get("", response_model=list[EmailRead], summary="List emails, newest first")
+def _priority_order() -> list:
+    """ORDER BY for the inbox (brief §7), done by the database:
+
+    1. new before handled (handled emails are shown greyed out at the bottom)
+    2. unclassified first, then critical -> high -> moderate -> low
+    3. newest first, then id (so equal emails never swap places)
+    """
+    status_rank = case((col(Email.status) == EmailStatus.HANDLED, 1), else_=0)
+    priority_rank = case(
+        (col(Email.priority).is_(None), 0),
+        (col(Email.priority) == Priority.CRITICAL, 1),
+        (col(Email.priority) == Priority.HIGH, 2),
+        (col(Email.priority) == Priority.MODERATE, 3),
+        else_=4,  # low
+    )
+    return [status_rank, priority_rank, *_newest_order()]
+
+
+def _newest_order() -> list:
+    return [col(Email.received_at).desc(), col(Email.id).desc()]
+
+
+# Declared BEFORE "/{email_id}": FastAPI tries routes in order, and the pattern
+# would otherwise read "summary" as an email id (and answer 422).
+@router.get("/summary", response_model=EmailSummary, summary="Counts for the inbox views")
+def email_summary(session: SessionDep) -> EmailSummary:
+    # One query: count emails per (priority, status) group, then add the groups up
+    rows = session.exec(
+        select(Email.priority, Email.status, func.count()).group_by(
+            col(Email.priority), col(Email.status)
+        )
+    ).all()
+    counts = dict.fromkeys(EmailSummary.model_fields, 0)
+    for priority, email_status, n in rows:
+        counts["all"] += n
+        counts["classified" if priority else "unclassified"] += n
+        if priority:
+            counts[priority.value] += n
+        if email_status == EmailStatus.HANDLED:
+            counts["handled"] += n
+    return EmailSummary(**counts)
+
+
+@router.get("", response_model=list[EmailRead], summary="List emails (priority order by default)")
 def list_emails(
     session: SessionDep,
     # `alias`: the URL still says ?status=..., but the Python name doesn't hide
     # FastAPI's `status` module imported above
     email_status: Annotated[EmailStatus | None, Query(alias="status")] = None,
     priority: Priority | None = None,
+    classified: bool | None = None,
+    sort: SortOrder = SortOrder.PRIORITY,
 ) -> list[Email]:
-    # Typed as enums: FastAPI rejects unknown values with 422 and lists the
-    # allowed ones in /docs. Filters are added only when given.
+    # Typed as enums/bools: FastAPI rejects unknown values with 422 and lists the
+    # allowed ones in /docs. Filters are added only when given; each sidebar view
+    # is one combination of them.
     query = select(Email)
     if email_status is not None:
         query = query.where(Email.status == email_status)
     if priority is not None:
         query = query.where(Email.priority == priority)
-    # id breaks ties, so emails with the same received_at never swap places
-    query = query.order_by(col(Email.received_at).desc(), col(Email.id).desc())
-    return list(session.exec(query))
+    if classified is not None:
+        has_priority = col(Email.priority).is_not(None)
+        query = query.where(has_priority if classified else col(Email.priority).is_(None))
+    order = _priority_order() if sort == SortOrder.PRIORITY else _newest_order()
+    return list(session.exec(query.order_by(*order)))
 
 
 @router.get(
@@ -115,7 +166,7 @@ def classify_unclassified(session: SessionDep, ai: OptionalAIDep) -> ClassifyRes
     query = (
         select(Email)
         .where(col(Email.priority).is_(None))
-        .order_by(col(Email.received_at).desc(), col(Email.id).desc())
+        .order_by(*_newest_order())
         .limit(CLASSIFY_LIMIT)
     )
     emails = list(session.exec(query))
