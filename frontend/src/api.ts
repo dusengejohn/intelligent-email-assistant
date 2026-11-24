@@ -83,6 +83,9 @@ export interface ClassifyTotals {
   classified: number
   ai: number
   fallback: number
+  /** New urgent emails among those just classified (for the alert, story 3.7) */
+  critical: number
+  high: number
 }
 
 interface ClassifyResult {
@@ -103,12 +106,16 @@ const MAX_CLASSIFY_REQUESTS = 20
 export async function classifyEmails(
   onProgress?: (classifiedSoFar: number) => void,
 ): Promise<ClassifyTotals> {
-  const totals: ClassifyTotals = { classified: 0, ai: 0, fallback: 0 }
+  const totals: ClassifyTotals = { classified: 0, ai: 0, fallback: 0, critical: 0, high: 0 }
   for (let i = 0; i < MAX_CLASSIFY_REQUESTS; i++) {
     const result = await request<ClassifyResult>('/api/emails/classify', { method: 'POST' })
     totals.classified += result.classified
     totals.ai += result.by_source.ai
     totals.fallback += result.by_source.fallback
+    // Counted from the emails this request classified: exact, unlike comparing
+    // /summary totals before/after (other changes could happen meanwhile)
+    totals.critical += result.emails.filter((e) => e.priority === 'critical').length
+    totals.high += result.emails.filter((e) => e.priority === 'high').length
     onProgress?.(totals.classified)
     // Done, or no progress (would otherwise loop forever)
     if (result.remaining === 0 || result.classified === 0) break

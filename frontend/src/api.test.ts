@@ -189,7 +189,7 @@ describe('classifyEmails', () => {
 
     const totals = await classifyEmails((done) => progress.push(done))
 
-    expect(totals).toEqual({ classified: 105, ai: 103, fallback: 2 })
+    expect(totals).toEqual({ classified: 105, ai: 103, fallback: 2, critical: 0, high: 0 })
     expect(mock).toHaveBeenCalledTimes(3)
     expect(mock).toHaveBeenCalledWith('/api/emails/classify', { method: 'POST' })
     expect(progress).toEqual([50, 100, 105])
@@ -198,7 +198,13 @@ describe('classifyEmails', () => {
   it('makes one call when there is nothing to classify', async () => {
     const mock = fakeFetchSequence(classifyAnswer(0, 0, 0))
 
-    expect(await classifyEmails()).toEqual({ classified: 0, ai: 0, fallback: 0 })
+    expect(await classifyEmails()).toEqual({
+      classified: 0,
+      ai: 0,
+      fallback: 0,
+      critical: 0,
+      high: 0,
+    })
     expect(mock).toHaveBeenCalledTimes(1)
   })
 
@@ -326,5 +332,23 @@ describe('single-email actions and the Trash', () => {
 
     expect(err.status).toBe(404)
     expect(err.message).toBe('Email not found')
+  })
+})
+
+describe('classifyEmails counts new urgent emails (for alerts)', () => {
+  it('adds up the critical and high emails across requests', async () => {
+    const answer = (priorities: Email['priority'][], remaining: number) =>
+      jsonResponse(200, {
+        classified: priorities.length,
+        by_source: { ai: priorities.length, fallback: 0 },
+        remaining,
+        emails: priorities.map((priority, i) => ({ ...EMAIL, id: i, priority })),
+      })
+    fakeFetchSequence(answer(['critical', 'high', 'low'], 2), answer(['critical', 'moderate'], 0))
+
+    const totals = await classifyEmails()
+
+    expect(totals.critical).toBe(2)
+    expect(totals.high).toBe(1)
   })
 })
