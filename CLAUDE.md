@@ -28,6 +28,9 @@ Guidance for Claude Code when working in this repository.
   `ReadingPane` holds the per-email actions; `Toast` (reusable, auto-hides, optional action
   such as Undo) and `ConfirmDialog` (only for irreversible actions) are shared components;
   `src/selection.ts` picks the next email when the open one leaves the view.
+  Alerts for new critical/high emails follow Classify and are counted from the classify
+  response (`src/alerts.ts`); desktop notifications go only through `src/notifications.ts`
+  (opt-in by click, shown only when the tab is hidden; the toast always appears).
   `src/priorities.ts` mirrors `app/priorities.py` (labels, colors); the backend test
   `tests/test_frontend_priorities_sync.py` fails if they drift apart.
 - `data/` — SQLite database file (git-ignored).

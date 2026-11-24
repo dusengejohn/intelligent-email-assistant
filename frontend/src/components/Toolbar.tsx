@@ -1,3 +1,4 @@
+import { DesktopAlertsButton } from './DesktopAlertsButton'
 import { GenerateControls } from './GenerateControls'
 import { HealthPill } from './HealthPill'
 
@@ -27,7 +28,8 @@ export function Toolbar({ generating, classifying, loadingList, onGenerate, onCl
           {classifying ? 'Classifying…' : 'Classify'}
         </button>
       </div>
-      <div className="ml-auto">
+      <div className="ml-auto flex items-center gap-3">
+        <DesktopAlertsButton />
         <HealthPill />
       </div>
     </header>

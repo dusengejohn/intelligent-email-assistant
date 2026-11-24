@@ -33,7 +33,7 @@ function json(body: unknown, status = 200): Response {
 }
 
 /** In-memory backend: lists, summary, PATCH, delete/restore/empty trash. Records requests. */
-function fakeApi(initial: Email[]) {
+function fakeApi(initial: Email[], classifyAs: Record<number, Email['priority']> = {}) {
   const db = initial.map((e) => ({ ...e }))
   const requests: string[] = []
   const active = () => db.filter((e) => !e.deleted_at)
@@ -61,6 +61,15 @@ function fakeApi(initial: Email[]) {
       const target = db.find((e) => e.id === id)
       if (path === '/api/health') return json({ status: 'ok' })
       if (path === '/api/emails/summary') return json(summary())
+      if (method === 'POST' && path === '/api/emails/classify') {
+        // Classify every unclassified email as `classifyAs` says (default: low)
+        const done = active().filter((e) => !e.priority)
+        for (const e of done) {
+          e.priority = classifyAs[e.id] ?? 'low'
+          e.classification_source = 'ai'
+        }
+        return json({ classified: done.length, by_source: { ai: done.length, fallback: 0 }, remaining: 0, emails: done })
+      }
       if (method === 'DELETE' && path === '/api/emails/trash') {
         const before = db.length
         db.splice(0, db.length, ...active())
@@ -283,5 +292,48 @@ describe('App: reading pane', () => {
 
     await waitFor(() => expect(requests).toContain('DELETE /api/emails/trash'))
     expect(await screen.findByText('Trash is empty.')).toBeInTheDocument()
+  })
+})
+
+describe('App: alerts for new urgent emails', () => {
+  it('shows an alert after Classify, and "Show critical" opens that view', async () => {
+    fakeApi([email(1, 'Outage', null), email(2, 'Lunch', null)], { 1: 'critical', 2: 'low' })
+    render(<App />)
+    await screen.findByRole('list', { name: 'Emails' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Classify' }))
+
+    expect(await screen.findByText('1 new critical')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Show critical' }))
+    await waitFor(() => expect(window.location.search).toBe('?view=critical'))
+  })
+
+  it('shows no alert when nothing urgent was classified', async () => {
+    fakeApi([email(1, 'Newsletter', null)], { 1: 'low' })
+    render(<App />)
+    await screen.findByRole('list', { name: 'Emails' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Classify' }))
+
+    await screen.findByText(/Classified 1 emails/)
+    expect(screen.queryByText(/new critical|new high/)).not.toBeInTheDocument()
+  })
+
+  it('never asks for notification permission on page load', async () => {
+    const requestPermission = vi.fn(async () => 'granted' as NotificationPermission)
+    vi.stubGlobal(
+      'Notification',
+      class {
+        static permission: NotificationPermission = 'default'
+        static requestPermission = requestPermission
+      },
+    )
+    fakeApi([email(1, 'One', 'low')])
+
+    render(<App />)
+    await screen.findByRole('list', { name: 'Emails' })
+
+    expect(requestPermission).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Enable desktop alerts' })).toBeInTheDocument()
   })
 })

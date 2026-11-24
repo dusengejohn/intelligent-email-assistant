@@ -14,6 +14,7 @@ import {
   type EmailSummary,
   type Priority,
 } from './api'
+import { alertMessage, alertView } from './alerts'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { EmailList } from './components/EmailList'
 import { ErrorBanner } from './components/ErrorBanner'
@@ -21,6 +22,7 @@ import { ReadingPane } from './components/ReadingPane'
 import { Sidebar, ViewSelect } from './components/Sidebar'
 import { Toast } from './components/Toast'
 import { Toolbar } from './components/Toolbar'
+import { notify } from './notifications'
 import { nextSelection } from './selection'
 import { viewById, viewFromUrl, viewUrl, type ViewId } from './views'
 
@@ -162,6 +164,7 @@ function App() {
           ? 'Nothing to classify: every email already has a priority.'
           : `Classified ${totals.classified} emails: ${totals.ai} by AI, ${totals.fallback} by rules.`,
       )
+      announceUrgent(totals)
     } catch (err) {
       setError(messageOf(err))
     } finally {
@@ -169,6 +172,19 @@ function App() {
       reload()
       setClassifying(false)
     }
+  }
+
+  /** Alert for new critical/high emails: in-page toast always, desktop notification if allowed. */
+  function announceUrgent(counts: { critical: number; high: number }) {
+    const message = alertMessage(counts)
+    if (!message) return // nothing urgent: no alert
+    const target = alertView(counts)
+    const open = () => {
+      setToast(null)
+      selectView(target)
+    }
+    setToast({ message, actionLabel: `Show ${target}`, onAction: open })
+    notify('New urgent emails', message, open)
   }
 
   function handleDelete(email: Email) {
