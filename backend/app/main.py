@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI
 
 from app.db import migrate_database
-from app.routers import emails, health
+from app.routers import calendar, emails, health
 
 # uvicorn only sets up its own loggers; without this, the app's INFO lines
 # (e.g. "Ingested 10 emails", "Classified 45 emails") would be silently dropped.
@@ -29,4 +29,5 @@ app = FastAPI(title="Intelligent Email Assistant", lifespan=lifespan)
 api = APIRouter(prefix="/api")
 api.include_router(health.router)
 api.include_router(emails.router)
+api.include_router(calendar.router)
 app.include_router(api)

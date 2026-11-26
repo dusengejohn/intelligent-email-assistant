@@ -123,6 +123,19 @@ to `INBOX_URL` (default `http://localhost:8000`). Inbox down or wrong token → 
 "Generated N emails but … Nothing was delivered." No key or no `INGEST_TOKEN` → 503
 before any Claude call.
 
+## Calendar (Epic 4, read-only)
+
+`GET /api/calendar/events?date=YYYY-MM-DD` (default: today in `APP_TIMEZONE`) returns the day's
+events with UTC times, sorted. For now they come from a **mock calendar**: a weekly template in
+local time (`backend/app/data/calendar_mock.json`: stand-up, lunch, meetings, a free weekend),
+so every date looks realistic. Edit the template to change your "week"; a test fails if the file
+is invalid. The app never creates or changes events.
+
+```bash
+curl localhost:8080/api/calendar/events               # today
+curl "localhost:8080/api/calendar/events?date=2026-11-28"   # a Saturday: []
+```
+
 ## Using the inbox
 
 Open http://localhost:8080 (Docker) or http://localhost:5173 (dev). Use a normal browser
