@@ -81,6 +81,34 @@ card: it becomes `manual` and is never overwritten by later classifications.
 choose 1–50 and click **Generate emails**; or use the API docs at
 http://localhost:8000/docs (`POST /api/emails/generate` → *Try it out*).
 
+## Using the inbox
+
+Open http://localhost:8080 (Docker) or http://localhost:5173 (dev). Use a normal browser
+(Firefox, Edge, Chrome): VS Code's built-in browser doesn't send the requests that change
+data (see `docs/testing/epic-3.md`).
+
+- **Layout:** toolbar on top (Generate, Classify, desktop alerts, health), views on the
+  left, the email list in the middle (it scrolls; the column header stays put) and the
+  **reading pane** when an email is open (side by side on wide screens; on narrower ones
+  it replaces the list, with "Back to list").
+- **Order:** new emails before handled ones (handled are greyed out at the bottom);
+  within each, unclassified first, then Critical → High → Moderate → Low, newest first.
+- **Views** with counts: All, Unclassified, Classified, each priority and the Trash. The
+  view is part of the address (`/?view=critical`), so refresh, bookmarks and Back keep it.
+  On a narrow window the views are a dropdown above the list.
+- **Reading pane:** the full email, its priority, source and reason, and the actions:
+  change the priority (becomes `manual`, never overwritten by Classify), Mark handled /
+  Mark as new, Re-classify (one Claude call), Delete.
+- **Trash:** Delete moves an email to the Trash at once, with an **Undo** toast. In the
+  Trash view, open an email to **Restore** it; **Empty trash** deletes everything in it
+  permanently and asks first.
+- **Alerts:** after Classify, a toast like "1 new critical, 3 new high" with **Show
+  critical** appears when new urgent emails were classified. **Enable desktop alerts**
+  (top right) adds a system notification when the tab is in the background; the browser
+  asks for permission only when you click it.
+- **Keyboard:** Tab to a view or a row and press Enter to open it; Esc closes the
+  confirmation dialog.
+
 ## Database migrations (Alembic)
 
 The database structure is versioned with [Alembic](https://alembic.sqlalchemy.org/)

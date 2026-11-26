@@ -2,7 +2,7 @@
 
 > **Purpose of this file:** the single source of truth for *what* this project must do,
 > *why*, and *how* it is built. Claude Code: read this before planning any work.
-> Owner: John Dusenge · Repo: `dusengejohn/intelligent-email-assistant` · Last updated: 2026-11-23
+> Owner: John Dusenge · Repo: `dusengejohn/intelligent-email-assistant` · Last updated: 2026-11-26
 
 ---
 
@@ -157,13 +157,16 @@ unclassified emails first within each group.
 - `PATCH /api/emails/{id}` with `{priority?, status?}`; changing priority sets source `manual`.
 - Tests: fallback classifier on fixed sample emails gives expected priorities; AI client mocked.
 
-### Epic 3 — Dashboard & notifications (frontend)
+### Epic 3 — Dashboard & notifications (frontend) (done)
 - Email list sorted by priority, color-coded (left border/badge), with reason shown.
 - Summary panel: count per priority (from `GET /api/emails/summary` → `{critical, high, moderate, low, unclassified}`).
 - Filters by priority/status; "Mark handled" button.
 - Toast + optional browser Notification (Notification API, permission requested) when new
   Critical/High emails appear after generate/classify.
 - Buttons: "Generate emails", "Classify".
+- Added in the story review (#4): Outlook/Gmail-style inbox (one line per email, scrolling
+  list, sticky column header), views with counts incl. Trash, reading pane, soft delete with
+  Undo / Restore / Empty trash, database migrations (Alembic).
 
 ### Epic 4 — Calendar-based response planning (advice only)
 - `GET /api/calendar/events?date=YYYY-MM-DD` (mock source first; Google Calendar / Microsoft Graph later).
@@ -225,7 +228,7 @@ unclassified emails first within each group.
 6. README / CLAUDE.md / this brief updated if behaviour, commands or decisions changed.
 7. I (John) have read and understood the code.
 
-## 12. Current status (2026-11-23)
+## 12. Current status (2026-11-26)
 
 - ✅ Repo structure, README, CLAUDE.md, `.gitignore`, `.env.example`, `.gitattributes`
 - ✅ Backend: `GET /api/health` (under `APIRouter(prefix="/api")`) + test; uv/pyproject/uv.lock; ruff config
@@ -274,6 +277,23 @@ unclassified emails first within each group.
 - Known limits: AI and rules disagree on ~half of the generated emails; classify is sequential
   (~20 s per 50 emails); the eval is time-dependent and its labels are debatable (see eval doc);
   generated emails repeat; HTTPS interception on the machine can force the fallback
+
+**Epic 3 — Dashboard & notifications: done** (#62–#69, test log: `docs/testing/epic-3.md`)
+- ✅ Priority order in SQL (new before handled, unclassified first), `?classified=`, `/summary` counts (#62)
+- ✅ Alembic migrations; existing DB stamped at `0001`; drift test in CI (#63)
+- ✅ Soft delete: `deleted_at` (migration `0002`), Trash, restore, empty trash (#64)
+- ✅ Outlook/Gmail-style layout, aligned columns, sticky header; React Testing Library in CI (#65)
+- ✅ Sidebar views with counts, view in the URL (Back/refresh), scroll fix (#66)
+- ✅ Reading pane: priority, handled, re-classify, delete with Undo, restore, empty trash with confirmation (#67)
+- ✅ Alerts for new critical/high emails (toast; opt-in desktop notifications) (#68)
+- ✅ End to end in Docker with log evidence, persistence across `down`/`up`, docs (#69)
+- Decisions: soft delete with Undo, confirmation only for the permanent step; handled emails
+  stay greyed in the list; the server sorts and counts, the browser never does; alerts are
+  counted from the classify response; desktop notifications opt-in by click, only when hidden
+- Known limits / follow-ups: pane priority change not confirmed in a real browser (#77);
+  VS Code's built-in browser doesn't send data-changing requests (use a normal browser);
+  Docker Desktop's engine can stay stopped after a reboot (restart it); a dashboard page with
+  counts, brief and widgets is noted for Epic 5 (#6)
 
 ## 13. Roadmap
 

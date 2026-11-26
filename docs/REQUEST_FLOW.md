@@ -19,11 +19,12 @@
 5. [Calling the API: `GET /api/health`](#5-calling-the-api-get-apihealth)
 6. [Generating emails: `POST /api/emails/generate`](#6-generating-emails-post-apiemailsgenerate)
 7. [Classifying emails: `POST /api/emails/classify`](#7-classifying-emails-post-apiemailsclassify)
-8. [Why one origin: no CORS needed](#8-why-one-origin-no-cors-needed)
-9. [Dev mode vs Docker mode](#9-dev-mode-vs-docker-mode)
-10. [When it breaks: symptoms and causes](#10-when-it-breaks-symptoms-and-causes)
-11. [Try it yourself](#11-try-it-yourself)
-12. [Glossary](#12-glossary)
+8. [The inbox: views, summary and Trash](#8-the-inbox-views-summary-and-trash)
+9. [Why one origin: no CORS needed](#9-why-one-origin-no-cors-needed)
+10. [Dev mode vs Docker mode](#10-dev-mode-vs-docker-mode)
+11. [When it breaks: symptoms and causes](#11-when-it-breaks-symptoms-and-causes)
+12. [Try it yourself](#12-try-it-yourself)
+13. [Glossary](#13-glossary)
 
 ---
 
@@ -399,7 +400,66 @@ touches it again. `POST /api/emails/{id}/classify` re-classifies one email on pu
 
 ---
 
-## 8. Why one origin: no CORS needed
+## 8. The inbox: views, summary and Trash
+
+What the page asks the backend for when you use the inbox (Epic 3).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant R as React (browser)
+    participant N as nginx (:80)
+    participant F as FastAPI (backend)
+    participant D as SQLite
+
+    Note over R: open /?view=critical (or click "Critical")
+    par list and counts in parallel
+        R->>N: GET /api/emails?priority=critical
+        N->>F: same
+        F->>D: WHERE deleted_at IS NULL AND priority = critical<br/>ORDER BY new before handled, priority, newest
+        F-->>R: 200 [emails]
+    and
+        R->>N: GET /api/emails/summary
+        F->>D: one GROUP BY (priority, status) + trash count
+        F-->>R: 200 {all, unclassified, classified, critical, …, handled, trash}
+    end
+    Note over R: click a row: reading pane (no request)
+    R->>N: DELETE /api/emails/42
+    F->>D: deleted_at = now (soft delete)
+    F-->>R: 204 No Content
+    Note over R: toast "Email moved to Trash · Undo"<br/>next email opens; list + counts reload
+    R->>N: POST /api/emails/42/restore (Undo)
+    F-->>R: 200 (all fields unchanged)
+```
+
+- **One table of views** ([`views.ts`](../frontend/src/views.ts)): each view is one
+  combination of filters (`priority`, `classified`, `trash`), and its count comes from
+  `/summary`, never computed in the browser.
+- **The view lives in the URL** (`?view=…`, History API): refresh, links and Back keep it.
+- **The database sorts and counts** (`ORDER BY CASE …`, `GROUP BY`): the browser shows rows
+  in the order it receives them.
+- **After every change** (priority, handled, delete, restore, classify, generate) the page
+  reloads the current view **and** the counts, because an email may move or leave the view.
+
+| Request | Effect | Answer |
+|---|---|---|
+| `GET /api/emails?…` | list a view (`sort=priority` default, `sort=newest`) | 200 |
+| `GET /api/emails/summary` | all view counts (handled included, Trash separate) | 200 |
+| `PATCH /api/emails/{id}` | priority (→ `manual`) and/or status | 200 |
+| `DELETE /api/emails/{id}` | move to the Trash (`deleted_at` set) | 204 |
+| `POST /api/emails/{id}/restore` | back from the Trash, unchanged | 200 |
+| `DELETE /api/emails/trash` | **empty the Trash** (permanent; the UI asks first) | 200 `{deleted}` |
+
+Trashed emails are invisible everywhere else: list, counts, bulk classify, PATCH (404).
+
+**Migrations at startup:** before serving requests, the backend runs
+`migrate_database()` (Alembic): it stamps a pre-migration database at `0001` once, then
+upgrades to the latest version (`0002` added `deleted_at`). Your data stays; the startup
+log says "Database schema is up to date".
+
+---
+
+## 9. Why one origin: no CORS needed
 
 An **origin** is scheme + host + port (`http://localhost:8080`). Browsers enforce the
 **same-origin policy**: JavaScript can't freely read responses from a *different* origin
@@ -414,7 +474,7 @@ Because nginx serves the page **and** proxies the API on the same origin:
 
 ---
 
-## 9. Dev mode vs Docker mode
+## 10. Dev mode vs Docker mode
 
 ```mermaid
 flowchart LR
@@ -441,7 +501,7 @@ The frontend code doesn't know or care which mode it's in.
 
 ---
 
-## 10. When it breaks: symptoms and causes
+## 11. When it breaks: symptoms and causes
 
 | Symptom | Likely cause | Check |
 |---|---|---|
@@ -459,11 +519,15 @@ The frontend code doesn't know or care which mode it's in.
 | From a WSL terminal, `curl localhost:8080` fails but the Windows browser works | Older Docker Desktop setups publish ports only on Windows | Use the Windows host IP: `ip route \| awk '/default/ {print $3}'` |
 | Classify says **"0 by AI, N by rules"** although a key is set | Every Claude call failed (connection, TLS, rate limit); the rules took over | `docker compose logs backend \| grep "Claude call failed"` |
 | Backend log shows `CERTIFICATE_VERIFY_FAILED … self-signed certificate` | Something (VPN, antivirus HTTPS scanning, captive portal) intercepts HTTPS from Docker | Test from the container: `docker compose exec backend python -c "import urllib.request; urllib.request.urlopen('https://api.anthropic.com')"`; fix the network, then reclassify |
+| Clicks that change data (Delete, priority) do nothing; views and page loads work | VS Code's built-in browser doesn't send `POST`/`PATCH`/`DELETE` to the app | Use Firefox/Edge/Chrome; the nginx log shows the browser (`Code/…` vs `Firefox/…`) |
+| After a reboot the app doesn't answer, Docker Desktop's window looks fine | Docker Desktop's engine didn't start: `docker-desktop` WSL distro *Stopped* | `wsl -l -v`; Docker Desktop → Troubleshoot → Restart (or `wsl --shutdown`, then start it) |
+| The whole page scrolls into a long blank area below the list | A scroll area without `position: relative` let `sr-only` labels escape (fixed in #66) | The list scroller in `App.tsx` must keep `relative` (tested) |
+| "Desktop alerts blocked in the browser" | Notifications were denied for the site | Allow notifications for `localhost:8080` in the browser's site settings |
 | Dev mode: `uvicorn` fails with *address already in use*, or `:5173` shows Docker's data | The Docker backend holds port 8000 (also inside WSL) | `docker compose stop backend` before dev mode |
 
 ---
 
-## 11. Try it yourself
+## 12. Try it yourself
 
 `localhost` works in a Windows browser and, with current Docker Desktop, in a WSL
 terminal too. If it doesn't in WSL on your setup, use the Windows host IP
@@ -500,7 +564,7 @@ assets, then `health`. Click `health` to see headers and the JSON response.
 
 ---
 
-## 12. Glossary
+## 13. Glossary
 
 | Term | Plain meaning |
 |---|---|
