@@ -11,7 +11,9 @@ Guidance for Claude Code when working in this repository.
   - `app/services/` — `clock.py` (time helpers for planning: `utc_now`, `local_today`,
     `work_window`, `get_now` dependency), `calendar.py` (`CalendarSource` Protocol: one
     read-only method `events(day)`; `MockCalendar` from the weekly template
-    `app/data/calendar_mock.json`, validated on load; `get_calendar` dependency), `rules.py` (`classify_by_rules`: the keyword classifier, the inbox's
+    `app/data/calendar_mock.json`, validated on load; `get_calendar` dependency),
+    `planner.py` (pure planning functions: `planning_window`, `free_slots` → `Slot`; no
+    database, no clock: pass `now` and the events in), `rules.py` (`classify_by_rules`: the keyword classifier, the inbox's
     only one; the reason names the matched keywords). **No AI in the inbox** (#92, ADR 0002);
   - `migrations/` + `alembic.ini` — Alembic database migrations, applied at startup by
     `app/db.py` `migrate_database()` (existing pre-Alembic databases are stamped at `0001`);
@@ -98,6 +100,9 @@ Guidance for Claude Code when working in this repository.
   questions (`services/clock.py`: `local_today`, `work_window` returns UTC instants) and for
   display. Never subtract two local datetimes (Python ignores DST then). Only `utc_now()` reads
   the clock; pass `now` into everything else so tests can fix the time.
+- **Property tests:** pure algorithms (e.g. `planner.py`) also get `hypothesis` tests: rules that
+  hold for any input, ideally compared with a slow, obviously correct version. Its example
+  database `.hypothesis/` is git-ignored.
 - **Data migrations:** autogenerate only sees schema changes; value changes (like 0003
   `FALLBACK` → `RULES`) are hand-written `UPDATE`s with an exact downgrade and a test on rows.
 - **The inbox never generates:** emails arrive via `POST /api/emails/ingest` (validated with
