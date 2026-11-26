@@ -75,6 +75,13 @@ repos:
         files: ^generator/
         pass_filenames: false
 
+      - id: generator-web-eslint
+        name: eslint (generator page)
+        entry: npm --prefix generator/web run lint
+        language: system
+        files: ^generator/web/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: false
+
       - id: eslint
         name: eslint (frontend)
         entry: npm --prefix frontend run lint

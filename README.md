@@ -99,6 +99,20 @@ curl -X POST localhost:8001/api/generate -H 'Content-Type: application/json' -d 
 # -> {"generated":10,"delivered":10}; the emails are now in the inbox
 ```
 
+**The generator's page** (`generator/web/`, React + Vite + Tailwind): in dev run
+`npm install && npm run dev` in `generator/web` → http://localhost:5174 (proxies `/api` to
+the generator on :8001). Type a count (1–50) and an optional scenario, click **Generate** →
+"10 new emails generated and delivered to the inbox" + **Open the inbox**. In the Docker
+image FastAPI serves the built page itself at `/` (one container, same origin):
+
+```bash
+docker build -t email-generator generator/
+docker run --rm -p 8081:8000 --env-file .env \
+  -e INBOX_URL=http://host.docker.internal:8000 --add-host host.docker.internal:host-gateway \
+  email-generator
+# -> http://localhost:8081 (compose wiring follows in story 3b.4)
+```
+
 The generator calls Claude (same key, same cost as Generate), then delivers the emails
 to `INBOX_URL` (default `http://localhost:8000`). Inbox down or wrong token → HTTP 502
 "Generated N emails but … Nothing was delivered." No key or no `INGEST_TOKEN` → 503
@@ -209,6 +223,7 @@ backend/migrations/        Alembic database migrations (applied at startup)
 backend/tests/             pytest (fakes.py = fake Claude client)
 generator/app/             Email generator service (Epic 3b): Claude client, generate, deliver to the inbox
 generator/tests/           its pytest suite (fakes: FakeAI, FakeInbox)
+generator/web/             its page (React; served by the generator in Docker)
 frontend/src/              React app: App.tsx, api.ts (typed API client), priorities.ts, components/
 docs/                      Brief, request flow, test checklists (docs/testing/)
 data/                      SQLite file (git-ignored)

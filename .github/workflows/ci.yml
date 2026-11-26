@@ -53,6 +53,21 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pytest
 
+      # The generator's page (generator/web): same checks as the inbox frontend
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: generator/web/package-lock.json
+      - run: npm ci
+        working-directory: generator/web
+      - run: npm run lint
+        working-directory: generator/web
+      - run: npm test
+        working-directory: generator/web
+      - run: npm run build
+        working-directory: generator/web
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

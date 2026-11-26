@@ -312,6 +312,8 @@ unclassified emails first within each group.
 - ✅ Inbox ingest API with a shared token (#80)
 - ✅ Generator service backend: `generator/` project, own Claude client copy, delivers to the
   inbox; 47 h age limit (1 h margin under the inbox's 48 h); CI job + pre-commit hooks (#81)
+- ✅ Generator page ("search engine" style, React) + one multi-stage, non-root image that serves
+  page and API on one origin; page tests in the `generator` CI job (#82)
 
 ## 13. Roadmap
 

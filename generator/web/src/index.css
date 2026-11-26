@@ -1,0 +1,3 @@
+/* Tailwind v4: one import brings in the reset and every utility class.
+   Styling lives in the components as class names (utility-first CSS). */
+@import 'tailwindcss';
