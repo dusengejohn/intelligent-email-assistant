@@ -81,6 +81,12 @@ card: it becomes `manual` and is never overwritten by later classifications.
 choose 1–50 and click **Generate emails**; or use the API docs at
 http://localhost:8000/docs (`POST /api/emails/generate` → *Try it out*).
 
+**Deliver emails from another service** (`POST /api/emails/ingest`, used by the separate
+generator service of Epic 3b): set `INGEST_TOKEN` in `.env` (see `.env.example` for how
+to generate one) and send `{"emails": [...]}` (1–50 emails) with the header
+`X-Ingest-Token`. Wrong or missing token → 401; `INGEST_TOKEN` not set → 503; any invalid
+email → 422 and nothing is saved. Emails arrive unclassified and `new`.
+
 ## Using the inbox
 
 Open http://localhost:8080 (Docker) or http://localhost:5173 (dev). Use a normal browser

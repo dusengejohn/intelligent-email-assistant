@@ -109,6 +109,31 @@ class GenerateRequest(BaseModel):
     )
 
 
+class IngestEmail(GeneratedEmail):
+    """One email delivered by another service: the same rules as generated emails.
+
+    Unknown fields are an error, so a sender can't set `priority` or `status`:
+    those belong to the inbox.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class IngestRequest(BaseModel):
+    """Body of POST /api/emails/ingest."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    emails: list[IngestEmail] = Field(min_length=1, max_length=50)
+
+
+class IngestResult(BaseModel):
+    """Response of POST /api/emails/ingest."""
+
+    created: int
+    ids: list[int]
+
+
 class EmailRead(BaseModel):
     """An email as returned by the API (all fields; timestamps are UTC-aware)."""
 
