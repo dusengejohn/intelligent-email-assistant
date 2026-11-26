@@ -53,7 +53,9 @@ Guidance for Claude Code when working in this repository.
 - Tests: `uv run pytest`
 - Lint: `uv run ruff check .` (auto-fix: `--fix`)
 - Format: `uv run ruff format .`
-- Full stack (from repo root): `docker compose up --build`
+- Full stack (from repo root): `docker compose up --build` → inbox :8080, inbox API :8000,
+  generator :8081 (delivers to `http://backend:8000` on the compose network);
+  wiring check: `bash .github/scripts/compose_smoke.sh` (CI runs it in the `docker` job)
 
 ## Commands (run from `generator/`)
 - Same as `backend/`: `uv sync`, `uv run pytest`, `uv run ruff check .`, `uv run ruff format .`

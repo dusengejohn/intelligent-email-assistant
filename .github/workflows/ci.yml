@@ -90,16 +90,18 @@ jobs:
 
   docker:
     # Only spend time building images once lint + tests pass
-    needs: [backend, frontend]
+    needs: [backend, frontend, generator]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - run: docker compose build
-      - name: Backend container must not run as root
+      - name: Backend and generator containers must not run as root
         run: |
-          uid="$(docker compose run --rm --no-deps -T backend id -u)"
-          echo "backend runs as UID $uid"
-          test "$uid" != "0"
+          for service in backend generator; do
+            uid="$(docker compose run --rm --no-deps -T "$service" id -u)"
+            echo "$service runs as UID $uid"
+            test "$uid" != "0"
+          done
       - name: nginx config is valid
         # nginx -t parses the config without serving anything. It also resolves
         # `backend` (proxy_pass), which only exists on the compose network, so map
@@ -107,3 +109,17 @@ jobs:
         run: |
           image="$(docker compose config --images | grep frontend)"
           docker run --rm --add-host backend:127.0.0.1 "$image" nginx -t
+      - name: Smoke test the whole stack (no Claude call)
+        # A throwaway .env: a dummy token shared by backend and generator, no API key.
+        # data/ must be writable by the backend's UID 1000 (the runner is UID 1001).
+        run: |
+          printf 'INGEST_TOKEN=ci-smoke-token-not-a-secret\n' > .env
+          mkdir -p data && chmod 777 data
+          docker compose up -d --wait
+          bash .github/scripts/compose_smoke.sh
+      - name: Logs if something failed
+        if: failure()
+        run: docker compose logs --tail 50
+      - name: Stop the stack
+        if: always()
+        run: docker compose down
