@@ -8,7 +8,8 @@ Guidance for Claude Code when working in this repository.
     `db.py`, `models.py` (tables), `schemas.py` (API + AI shapes), `priorities.py`
     (brief §7 as code: the single source for priority meanings, colors, default minutes);
   - `app/routers/` — endpoints (`health.py`, `emails.py`);
-  - `app/services/` — `rules.py` (`classify_by_rules`: the keyword classifier, the inbox's
+  - `app/services/` — `clock.py` (time helpers for planning: `utc_now`, `local_today`,
+    `work_window`), `rules.py` (`classify_by_rules`: the keyword classifier, the inbox's
     only one; the reason names the matched keywords). **No AI in the inbox** (#92, ADR 0002);
   - `migrations/` + `alembic.ini` — Alembic database migrations, applied at startup by
     `app/db.py` `migrate_database()` (existing pre-Alembic databases are stamped at `0001`);
@@ -91,6 +92,10 @@ Guidance for Claude Code when working in this repository.
 - **Classification is keyword rules only** (`rules.py`, source `rules`; old emails may still
   say `ai`). Bulk Classify never overwrites a priority; "Classify by keywords" on one email
   does. An AI feature in the inbox (e.g. Epic 5's brief) needs a new decision (ADR) first.
+- **Time:** store and compute in UTC (aware datetimes); use `APP_TIMEZONE` only to answer local
+  questions (`services/clock.py`: `local_today`, `work_window` returns UTC instants) and for
+  display. Never subtract two local datetimes (Python ignores DST then). Only `utc_now()` reads
+  the clock; pass `now` into everything else so tests can fix the time.
 - **Data migrations:** autogenerate only sees schema changes; value changes (like 0003
   `FALLBACK` → `RULES`) are hand-written `UPDATE`s with an exact downgrade and a test on rows.
 - **The inbox never generates:** emails arrive via `POST /api/emails/ingest` (validated with

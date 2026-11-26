@@ -24,6 +24,8 @@ APP_ENV_VARS = (
     "APP_ENV",
     "DATABASE_URL",
     "INGEST_TOKEN",
+    "APP_TIMEZONE",
+    "WORK_HOURS",
 )
 
 

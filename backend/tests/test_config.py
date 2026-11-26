@@ -4,12 +4,17 @@ The inbox has no AI settings any more (keyword rules only); the reading rules
 (.env file, environment wins, secrets hidden) are tested with the settings left.
 """
 
+from datetime import time
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app import config
 from app.config import Settings, get_settings
+from app.main import app
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -98,3 +103,89 @@ def test_blank_ingest_token_means_ingest_disabled(
     monkeypatch.setenv("INGEST_TOKEN", blank)
 
     assert get_settings().ingest_token is None
+
+
+# --- planning settings (story 4.1, issue #95) ----------------------------------------
+
+
+def test_planning_defaults() -> None:
+    settings = get_settings()
+
+    assert settings.app_timezone == "America/Toronto"
+    assert settings.timezone == ZoneInfo("America/Toronto")
+    assert (settings.work_start, settings.work_end) == (time(9, 0), time(17, 0))
+
+
+@pytest.mark.parametrize(
+    ("value", "start", "end"),
+    [
+        ("08:30-17:15", time(8, 30), time(17, 15)),
+        ("08:30 - 17:15", time(8, 30), time(17, 15)),
+        ("00:00-23:59", time(0, 0), time(23, 59)),
+    ],
+)
+def test_work_hours_are_read_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch, value: str, start: time, end: time
+) -> None:
+    monkeypatch.setenv("WORK_HOURS", value)
+
+    settings = get_settings()
+
+    assert (settings.work_start, settings.work_end) == (start, end)
+
+
+def test_time_zone_is_read_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_TIMEZONE", "Europe/Berlin")
+
+    assert get_settings().timezone == ZoneInfo("Europe/Berlin")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "17:00-09:00",
+        "09:00-09:00",
+        "9-5",
+        "9:00-17:00",  # two digits required
+        "9am-5pm",
+        "24:00-25:00",  # start hour out of range
+        "08:00-24:00",  # end hour out of range
+        "09:00-17:60",
+        "09:00-17:00:30",
+        "",
+    ],
+)
+def test_invalid_work_hours_fail_with_a_clear_message(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    monkeypatch.setenv("WORK_HOURS", value)
+
+    with pytest.raises(ValidationError) as failure:
+        get_settings()
+
+    message = str(failure.value)
+    assert "work_hours" in message
+    assert "HH:MM-HH:MM" in message or "before" in message
+
+
+@pytest.mark.parametrize("value", ["Mars/Olympus", "", "EST5EDT/Nope", "../etc/passwd"])
+def test_invalid_time_zone_fails_with_a_clear_message(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    monkeypatch.setenv("APP_TIMEZONE", value)
+
+    with pytest.raises(ValidationError) as failure:
+        get_settings()
+
+    assert "app_timezone" in str(failure.value)
+    assert "IANA" in str(failure.value)
+
+
+def test_the_app_refuses_to_start_with_bad_planning_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Fail fast: the settings are read at startup (migrations), not hours later
+    monkeypatch.setenv("WORK_HOURS", "17:00-09:00")
+
+    with pytest.raises(ValidationError), TestClient(app):
+        pass
