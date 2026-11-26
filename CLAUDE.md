@@ -38,7 +38,10 @@ Guidance for Claude Code when working in this repository.
   use React Testing Library in a simulated browser: a file opts in with
   `// @vitest-environment jsdom` (others run in Node); shared setup in `src/test-setup.ts`.
   The list header and rows share one grid template (`src/components/columns.ts`).
-  `src/views.ts` is the single table of sidebar views (label, API filter, summary count);
+  `src/views.ts` is the single table of sidebar views (label, API filter, summary count; the
+  **Plan** view has no count and renders `components/PlanView.tsx` instead of the list, while
+  the All list still loads for the reading pane); `src/plan.ts` holds the Plan's pure helpers
+  (`planSummary`, `timeIn` with the API's `timezone`, `position`, `lanes`, `addDays`);
   the selected view lives in the URL (`?view=critical`, History API for Back/Forward).
   `ReadingPane` holds the per-email actions; `Toast` (reusable, auto-hides, optional action
   such as Undo) and `ConfirmDialog` (only for irreversible actions) are shared components;

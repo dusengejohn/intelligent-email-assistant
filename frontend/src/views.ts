@@ -4,6 +4,7 @@ import type { EmailFilter, EmailSummary } from './api'
 import { PRIORITIES } from './priorities'
 
 export type ViewId =
+  | 'plan'
   | 'all'
   | 'unclassified'
   | 'classified'
@@ -17,12 +18,15 @@ export interface View {
   id: ViewId
   label: string
   filter: EmailFilter // what GET /api/emails is asked for
-  countKey: keyof EmailSummary // which /summary number belongs to it
+  countKey?: keyof EmailSummary // which /summary number belongs to it (none for the Plan)
   empty: string // message when the view has no emails
   color?: string // priority dot
 }
 
 export const VIEWS: View[] = [
+  // The day's plan (Epic 4). It still loads all emails, so the reading pane can open
+  // an email clicked in the plan.
+  { id: 'plan', label: 'Plan', filter: {}, empty: 'Nothing to plan.' },
   { id: 'all', label: 'All', filter: {}, countKey: 'all', empty: 'No emails yet. New ones come from the Email Generator.' },
   { id: 'unclassified', label: 'Unclassified', filter: { classified: false }, countKey: 'unclassified', empty: 'Nothing to classify.' },
   { id: 'classified', label: 'Classified', filter: { classified: true }, countKey: 'classified', empty: 'No classified emails yet. Click Classify.' },

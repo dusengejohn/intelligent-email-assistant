@@ -22,7 +22,9 @@ export function Sidebar({ active, summary, onSelect }: Props) {
           return (
             <li key={view.id}>
               {/* A gap before the priorities and before the Trash groups the list */}
-              {(view.id === 'critical' || view.id === 'trash') && <hr className="my-2 border-gray-200" />}
+              {(view.id === 'all' || view.id === 'critical' || view.id === 'trash') && (
+                <hr className="my-2 border-gray-200" />
+              )}
               <button
                 type="button"
                 onClick={() => onSelect(view.id)}
@@ -35,8 +37,11 @@ export function Sidebar({ active, summary, onSelect }: Props) {
                   <span aria-hidden="true" className="size-2 rounded-full" style={{ backgroundColor: view.color }} />
                 )}
                 {view.id === 'trash' && <span aria-hidden="true">🗑</span>}
+                {view.id === 'plan' && <span aria-hidden="true">📅</span>}
                 <span className="flex-1">{view.label}</span>
-                {summary && <span className="text-xs text-gray-500">{summary[view.countKey]}</span>}
+                {summary && view.countKey && (
+                  <span className="text-xs text-gray-500">{summary[view.countKey]}</span>
+                )}
               </button>
             </li>
           )
@@ -59,7 +64,7 @@ export function ViewSelect({ active, summary, onSelect }: Props) {
         {VIEWS.map((view) => (
           <option key={view.id} value={view.id}>
             {view.label}
-            {summary ? ` (${summary[view.countKey]})` : ''}
+            {summary && view.countKey ? ` (${summary[view.countKey]})` : ''}
           </option>
         ))}
       </select>

@@ -115,6 +115,7 @@ def test_the_thursday_plan(
     assert response.status_code == 200
     body = response.json()
     assert body["date"] == THURSDAY
+    assert body["timezone"] == "America/Toronto"  # the page formats times in this zone
     assert body["window"] == {"start": "2026-11-26T14:00:00Z", "end": "2026-11-26T22:00:00Z"}
     assert [(s["start"][11:16], s["end"][11:16], s["minutes"]) for s in body["free_slots"]] == [
         ("14:00", "14:30", 30),

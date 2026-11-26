@@ -23,7 +23,8 @@ describe('Sidebar', () => {
 
     const nav = screen.getByRole('navigation', { name: 'Views' })
     const buttons = within(nav).getAllByRole('button')
-    expect(buttons).toHaveLength(8)
+    expect(buttons).toHaveLength(9)
+    expect(buttons[0]).toHaveTextContent(/^📅Plan$/) // first, and without a count
     expect(within(nav).getByRole('button', { name: /Unclassified/ })).toHaveTextContent('10')
     expect(within(nav).getByRole('button', { name: /Critical/ })).toHaveTextContent('31')
     expect(within(nav).getByRole('button', { name: /Trash/ })).toHaveTextContent('2')
@@ -63,5 +64,14 @@ describe('ViewSelect (narrow screens)', () => {
     await userEvent.selectOptions(screen.getByLabelText('View'), 'trash')
 
     expect(onSelect).toHaveBeenCalledWith('trash')
+  })
+})
+
+describe('ViewSelect with the Plan', () => {
+  it('lists the Plan without a count', () => {
+    render(<ViewSelect active="all" summary={SUMMARY} onSelect={vi.fn()} />)
+
+    expect(screen.getByRole('option', { name: 'Plan' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Trash (2)' })).toBeInTheDocument()
   })
 })

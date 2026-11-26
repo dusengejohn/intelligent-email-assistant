@@ -143,6 +143,51 @@ export function classifyOne(id: number): Promise<Email> {
   return request<Email>(`/api/emails/${id}/classify`, { method: 'POST' })
 }
 
+// --- Planning (Epic 4) ---------------------------------------------------------------
+// All times are UTC ISO strings; show them in `Plan.timezone` (APP_TIMEZONE).
+
+export interface CalendarEvent {
+  id: string
+  title: string
+  start: string
+  end: string
+}
+
+export interface PlanEmail {
+  id: number
+  subject: string
+  priority: Priority
+  /** Suggested time to reply */
+  minutes: number
+}
+
+/** When to answer what: one email, or the batch of low emails. */
+export interface PlanBlock {
+  start: string
+  end: string
+  priority: Priority
+  emails: PlanEmail[]
+}
+
+/** GET /api/planning/suggestions: advice only, nothing is booked. */
+export interface Plan {
+  /** The planned day, YYYY-MM-DD in `timezone` */
+  date: string
+  timezone: string
+  /** Working hours still ahead; null when the day is over */
+  window: { start: string; end: string } | null
+  events: CalendarEvent[]
+  free_slots: { start: string; end: string; minutes: number }[]
+  suggestions: PlanBlock[]
+  not_today: PlanEmail[]
+  unclassified: number
+}
+
+/** The plan for `date` (YYYY-MM-DD), or for today when left out. */
+export function getPlanning(date?: string): Promise<Plan> {
+  return request<Plan>(date ? `/api/planning/suggestions?date=${date}` : '/api/planning/suggestions')
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response
   try {

@@ -17,6 +17,7 @@ import { alertMessage, alertView } from './alerts'
 import { arrivalMessage, arrived, POLL_INTERVAL_MS } from './arrivals'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { EmailList } from './components/EmailList'
+import { PlanView } from './components/PlanView'
 import { ErrorBanner } from './components/ErrorBanner'
 import { ReadingPane } from './components/ReadingPane'
 import { Sidebar, ViewSelect } from './components/Sidebar'
@@ -78,6 +79,7 @@ function App() {
 
   const current = viewById(view)
   const inTrash = view === 'trash'
+  const inPlan = view === 'plan'
   const unclassified = summary?.unclassified ?? 0
   const selected = emails.find((e) => e.id === selectedId) ?? null
 
@@ -262,14 +264,20 @@ function App() {
           className={`relative min-w-0 flex-1 overflow-y-auto bg-white ${selected ? 'hidden xl:block' : ''}`}
         >
           <ViewSelect active={view} summary={summary} onSelect={selectView} />
-          <EmailList
-            emails={emails}
-            loading={loadingList}
-            emptyText={current.empty}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            onEmptyTrash={inTrash ? () => setConfirmEmpty(true) : undefined}
-          />
+          {inPlan ? (
+            // The day's plan (Epic 4). Same reload rules as the lists (new mail,
+            // Classify, handled...); a clicked email opens in the reading pane.
+            <PlanView reloadKey={reloadKey} selectedId={selectedId} onOpen={setSelectedId} />
+          ) : (
+            <EmailList
+              emails={emails}
+              loading={loadingList}
+              emptyText={current.empty}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onEmptyTrash={inTrash ? () => setConfirmEmpty(true) : undefined}
+            />
+          )}
         </main>
         {selected && (
           <aside className="relative min-w-0 flex-1 overflow-y-auto border-l border-gray-200 bg-white xl:w-[45%] xl:flex-none">

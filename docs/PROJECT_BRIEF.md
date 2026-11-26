@@ -366,6 +366,10 @@ unclassified emails first within each group.
   gap too small for an urgent email can serve a less urgent one), low emails batched at the
   end of the day, `not_today`, `unclassified` count; past date 422; a test proves nothing is
   written (#98)
+- ✅ Plan view (`?view=plan`): day timeline (meetings grey, reply blocks in priority colors,
+  overlaps side by side), summary sentence built by code, ‹ Today › date switch, open an email
+  from the plan; times in `APP_TIMEZONE` (sent by the API as `timezone`); reloads with new
+  mail, Classify and handled (#99)
 
 **Classify with keyword rules only: done** (#92, [ADR 0002](decisions/0002-rules-only-classification.md))
 - ✅ The inbox's only classifier is the keyword rules (`services/rules.py`); the reason names
