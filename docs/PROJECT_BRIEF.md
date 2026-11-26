@@ -357,6 +357,10 @@ unclassified emails first within each group.
 - ✅ Calendar: `CalendarSource` Protocol (read-only), `MockCalendar` from a validated weekly
   template (stand-up, lunch, meetings; an early call, an overlap, an event past 17:00; free
   weekend); `GET /api/calendar/events?date=` in UTC, default today (#96)
+- ✅ Free-slot algorithm (`services/planner.py`, pure): `planning_window` (the working day, from
+  "now" rounded up to 5 min if today; None when over) and `free_slots` (clip, sort, merge,
+  gaps ≥ 15 min); edge-case table, the real mock week, and property tests with `hypothesis`
+  compared against a brute-force version (#97)
 
 **Classify with keyword rules only: done** (#92, [ADR 0002](decisions/0002-rules-only-classification.md))
 - ✅ The inbox's only classifier is the keyword rules (`services/rules.py`); the reason names
