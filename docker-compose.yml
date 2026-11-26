@@ -34,3 +34,29 @@ services:
         condition: service_healthy   # wait for a passing healthcheck, not just a running container
     ports:
       - "8080:80"
+
+  # The Email Generator (Epic 3b): its own page + API in one container. It writes
+  # sample emails with Claude and delivers them to the inbox's ingest endpoint.
+  generator:
+    build: ./generator
+    restart: unless-stopped
+    env_file:
+      - path: .env        # ANTHROPIC_API_KEY and INGEST_TOKEN (the same token as the backend)
+        required: false
+    environment:
+      # Service discovery: on the compose network "backend" is the inbox
+      # container's name (Docker DNS), so no IP address is hard-coded. This is
+      # the internal port 8000, not a host port.
+      INBOX_URL: http://backend:8000
+    ports:
+      - "8081:8000"       # host 8081 -> container 8000 (the page and /api)
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+      start_interval: 1s
+    depends_on:
+      backend:
+        condition: service_healthy   # deliveries need a running inbox

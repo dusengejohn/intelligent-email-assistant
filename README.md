@@ -102,15 +102,11 @@ curl -X POST localhost:8001/api/generate -H 'Content-Type: application/json' -d 
 **The generator's page** (`generator/web/`, React + Vite + Tailwind): in dev run
 `npm install && npm run dev` in `generator/web` → http://localhost:5174 (proxies `/api` to
 the generator on :8001). Type a count (1–50) and an optional scenario, click **Generate** →
-"10 new emails generated and delivered to the inbox" + **Open the inbox**. In the Docker
-image FastAPI serves the built page itself at `/` (one container, same origin):
+"10 new emails generated and delivered to the inbox" + **Open the inbox**. In Docker,
+FastAPI serves the built page itself at `/` (one container, same origin):
 
 ```bash
-docker build -t email-generator generator/
-docker run --rm -p 8081:8000 --env-file .env \
-  -e INBOX_URL=http://host.docker.internal:8000 --add-host host.docker.internal:host-gateway \
-  email-generator
-# -> http://localhost:8081 (compose wiring follows in story 3b.4)
+docker compose up -d --build generator   # -> http://localhost:8081
 ```
 
 The generator calls Claude (same key, same cost as Generate), then delivers the emails
@@ -180,6 +176,19 @@ uv remove <package>
 Commit both `pyproject.toml` and `uv.lock`.
 
 ## Docker and the `data/` folder
+
+`docker compose up --build` runs **three services**:
+
+| Service | Host port | What |
+|---|---|---|
+| `frontend` | http://localhost:8080 | the inbox (nginx serves the page, proxies `/api` to `backend`) |
+| `backend` | http://localhost:8000 | the inbox API (`/docs`), SQLite in `./data` |
+| `generator` | http://localhost:8081 | the Email Generator: its page + API in one container |
+
+The generator delivers to the inbox **inside** the Docker network at `http://backend:8000`
+(the service name, resolved by Docker's DNS); both read `INGEST_TOKEN` from `.env`.
+Logs: `docker compose logs generator --tail 50`. Check the wiring (no Claude call, adds
+one "Compose smoke test delivery" email to the inbox): `bash .github/scripts/compose_smoke.sh`.
 
 **Use Docker Desktop only.** If a second Docker Engine is also installed inside
 Ubuntu/WSL (`systemctl is-active docker` says `active`), the two engines fight over
