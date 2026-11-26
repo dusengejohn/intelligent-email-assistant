@@ -361,6 +361,11 @@ unclassified emails first within each group.
   "now" rounded up to 5 min if today; None when over) and `free_slots` (clip, sort, merge,
   gaps ≥ 15 min); edge-case table, the real mock week, and property tests with `hypothesis`
   compared against a brute-force version (#97)
+- ✅ `GET /api/planning/suggestions?date=` (`routers/planning.py` reads, `planner.allocate` decides):
+  priority order, oldest first, "first pick" (decision A: the earliest gap each email fits; a
+  gap too small for an urgent email can serve a less urgent one), low emails batched at the
+  end of the day, `not_today`, `unclassified` count; past date 422; a test proves nothing is
+  written (#98)
 
 **Classify with keyword rules only: done** (#92, [ADR 0002](decisions/0002-rules-only-classification.md))
 - ✅ The inbox's only classifier is the keyword rules (`services/rules.py`); the reason names

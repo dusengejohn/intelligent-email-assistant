@@ -5,7 +5,7 @@ and delivered through POST /api/emails/ingest. The inbox never trusts the
 sender: `IncomingEmail` holds the rules every email must pass to be saved.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from typing import Self
 
@@ -20,6 +20,7 @@ from pydantic import (
 )
 
 from app.models import ClassificationSource, EmailStatus, Priority
+from app.services.calendar import CalendarEvent
 
 # Domains reserved for documentation (RFC 2606): guaranteed never to be real
 # mailboxes. Every sender must use one of these (or a subdomain).
@@ -183,3 +184,44 @@ class EmptyTrashResult(BaseModel):
     """Response of DELETE /api/emails/trash."""
 
     deleted: int = Field(description="Emails permanently deleted")
+
+
+# --- Planning (Epic 4, story 4.4) ----------------------------------------------------
+# Times are UTC instants ("...Z"); the browser shows them in local time.
+
+
+class PlanWindow(BaseModel):
+    start: datetime
+    end: datetime
+
+
+class PlanSlot(BaseModel):
+    start: datetime
+    end: datetime
+    minutes: int
+
+
+class PlanEmail(BaseModel):
+    id: int
+    subject: str
+    priority: Priority
+    minutes: int = Field(description="Suggested time to reply")
+
+
+class PlanBlock(BaseModel):
+    start: datetime
+    end: datetime
+    priority: Priority
+    emails: list[PlanEmail] = Field(description="One email; several only for the low batch")
+
+
+class PlanningResult(BaseModel):
+    """Response of GET /api/planning/suggestions: advice only, nothing is booked."""
+
+    date: date
+    window: PlanWindow | None = Field(description="Working hours still ahead; null if over")
+    events: list[CalendarEvent] = Field(description="The day's meetings (read-only)")
+    free_slots: list[PlanSlot] = Field(description="Free time before emails were placed")
+    suggestions: list[PlanBlock] = Field(description="When to answer what, in time order")
+    not_today: list[PlanEmail] = Field(description="Didn't fit today, most urgent first")
+    unclassified: int = Field(description="Open emails without a priority: classify first")

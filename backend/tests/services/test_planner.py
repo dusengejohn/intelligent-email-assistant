@@ -18,8 +18,17 @@ from hypothesis import settings as hypothesis_settings
 from hypothesis import strategies as st
 
 from app.config import Settings
+from app.models import Priority
 from app.services.calendar import MOCK_TEMPLATE, MockCalendar, load_template
-from app.services.planner import Slot, free_slots, planning_window
+from app.services.planner import (
+    Block,
+    PlannableEmail,
+    Slot,
+    allocate,
+    free_slots,
+    planning_window,
+    reply_minutes,
+)
 
 DAY = date(2026, 11, 26)  # a Thursday
 TORONTO = ZoneInfo("America/Toronto")
@@ -295,3 +304,173 @@ def test_free_slots_follow_the_rules_for_any_calendar(
         for s in slots
     ]
     assert got == expected
+
+
+# === allocate: placing the emails into the free slots (story 4.4, issue #98) ===========
+
+C, H, M, L = Priority.CRITICAL, Priority.HIGH, Priority.MODERATE, Priority.LOW
+OLD = datetime(2026, 11, 20, tzinfo=UTC)
+
+
+def mail(email_id: int, priority: Priority, minutes: int, age_hours: int = 0) -> PlannableEmail:
+    """An email that arrived `age_hours` after OLD (bigger = newer)."""
+    return PlannableEmail(
+        id=email_id,
+        subject=f"Email {email_id}",
+        priority=priority,
+        minutes=minutes,
+        received_at=OLD + timedelta(hours=age_hours),
+    )
+
+
+def slot(h1: int, m1: int, h2: int, m2: int) -> Slot:
+    return Slot(at(h1, m1), at(h2, m2))
+
+
+def plan(blocks: list[Block]) -> list[tuple[str, str, str, list[int]]]:
+    return [
+        (f"{b.start:%H:%M}", f"{b.end:%H:%M}", b.priority.value, [e.id for e in b.emails])
+        for b in blocks
+    ]
+
+
+def test_critical_gets_the_earliest_slot_then_high_then_moderate() -> None:
+    blocks, not_today = allocate(
+        [slot(9, 0, 12, 0)],
+        [mail(3, M, 10), mail(2, H, 30), mail(1, C, 15)],  # given in the wrong order
+    )
+
+    assert plan(blocks) == [
+        ("09:00", "09:15", "critical", [1]),
+        ("09:15", "09:45", "high", [2]),
+        ("09:45", "09:55", "moderate", [3]),
+    ]
+    assert not_today == []
+
+
+def test_oldest_first_within_a_priority() -> None:
+    blocks, _ = allocate([slot(9, 0, 12, 0)], [mail(1, H, 10, age_hours=5), mail(2, H, 10)])
+
+    assert [b.emails[0].id for b in blocks] == [2, 1]  # 2 arrived earlier
+
+
+def test_first_pick_lets_a_lower_priority_use_a_gap_too_small_for_a_higher_one() -> None:
+    # Decision A (#98): the 45-min critical can't use 09:00-09:30, so it gets the
+    # earliest slot it fits into; the 10-min moderate then uses the early gap
+    blocks, _ = allocate([slot(9, 0, 9, 30), slot(9, 45, 12, 0)], [mail(1, C, 45), mail(2, M, 10)])
+
+    assert plan(blocks) == [
+        ("09:00", "09:10", "moderate", [2]),
+        ("09:45", "10:30", "critical", [1]),
+    ]
+
+
+def test_low_emails_are_batched_at_the_end_of_the_last_slot() -> None:
+    blocks, not_today = allocate(
+        [slot(9, 0, 12, 0), slot(16, 0, 17, 0)],
+        [mail(1, L, 5), mail(2, H, 30), mail(3, L, 10, age_hours=1)],
+    )
+
+    assert plan(blocks) == [
+        ("09:00", "09:30", "high", [2]),
+        ("16:45", "17:00", "low", [1, 3]),  # one block, oldest first, ends with the day
+    ]
+    assert not_today == []
+
+
+def test_a_low_batch_takes_what_fits_and_the_rest_waits() -> None:
+    lows = [mail(i, L, 10, age_hours=i) for i in range(1, 5)]  # 4 x 10 min
+
+    blocks, not_today = allocate([slot(16, 30, 17, 0)], lows)  # 30 minutes left
+
+    assert plan(blocks) == [("16:30", "17:00", "low", [1, 2, 3])]
+    assert [e.id for e in not_today] == [4]
+
+
+def test_an_email_that_fits_nowhere_waits_but_smaller_ones_are_still_placed() -> None:
+    blocks, not_today = allocate(
+        [slot(9, 0, 9, 30), slot(10, 0, 10, 45)],
+        [mail(1, C, 60), mail(2, C, 20), mail(3, H, 40)],
+    )
+
+    assert plan(blocks) == [
+        ("09:00", "09:20", "critical", [2]),
+        ("10:00", "10:40", "high", [3]),
+    ]
+    assert [e.id for e in not_today] == [1]  # never squeezed in or split
+
+
+def test_no_free_time_means_nothing_today() -> None:
+    emails = [mail(1, C, 15), mail(2, L, 5)]
+
+    blocks, not_today = allocate([], emails)
+
+    assert blocks == []
+    assert [e.id for e in not_today] == [1, 2]
+
+
+def test_not_today_is_in_priority_order() -> None:
+    _, not_today = allocate([], [mail(1, L, 5), mail(2, M, 10), mail(3, C, 15), mail(4, H, 15)])
+
+    assert [e.priority for e in not_today] == [C, H, M, L]
+
+
+@pytest.mark.parametrize(
+    ("suggested", "priority", "expected"),
+    [(25, C, 25), (None, C, 15), (None, H, 15), (None, M, 10), (None, L, 5)],
+)
+def test_reply_minutes_fall_back_to_the_priority_default(
+    suggested: int | None, priority: Priority, expected: int
+) -> None:
+    assert reply_minutes(suggested, priority) == expected
+
+
+# --- properties of allocate -----------------------------------------------------------
+
+priorities = st.sampled_from([C, H, M, L])
+
+
+@hypothesis_settings(max_examples=300, deadline=None)
+@given(
+    # pause >= 1: like free_slots' output, slots never touch (a busy block lies between)
+    gaps=st.lists(st.tuples(st.integers(1, 60), st.integers(15, 120)), max_size=5),
+    specs=st.lists(st.tuples(priorities, st.integers(1, 60), st.integers(0, 100)), max_size=15),
+)
+def test_allocate_follows_the_rules_for_any_day(
+    gaps: list[tuple[int, int]], specs: list[tuple[Priority, int, int]]
+) -> None:
+    # Build separate slots: each starts `pause` minutes after the previous one ends
+    slots, cursor = [], at(9)
+    for pause, length in gaps:
+        start = cursor + timedelta(minutes=pause)
+        slots.append(Slot(start, start + timedelta(minutes=length)))
+        cursor = start + timedelta(minutes=length)
+    emails = [mail(i, p, m, age) for i, (p, m, age) in enumerate(specs)]
+
+    blocks, not_today = allocate(slots, emails)
+
+    planned = [e.id for b in blocks for e in b.emails]
+    assert sorted(planned + [e.id for e in not_today]) == sorted(e.id for e in emails)  # once
+    for block in blocks:
+        assert any(s.start <= block.start and block.end <= s.end for s in slots)  # in a slot
+        assert block.end - block.start == timedelta(minutes=sum(e.minutes for e in block.emails))
+        assert {e.priority for e in block.emails} == {block.priority}
+        assert len(block.emails) == 1 or block.priority == L  # only low is batched
+    assert [b.start for b in blocks] == sorted(b.start for b in blocks)  # time order
+    for earlier, later in zip(blocks, blocks[1:], strict=False):
+        assert earlier.end <= later.start  # no overlap
+    assert sum(b.priority == L for b in blocks) <= 1  # one low batch at most
+
+    # First pick: an urgent email left for another day really fitted nowhere, because
+    # free gaps only shrink after it was turned away
+    used = [Busy(b.start, b.end) for b in blocks]
+    leftover = free_slots(at(0), cursor, [*used, *_gaps_between(slots, cursor)], min_minutes=1)
+    for email in not_today:
+        if email.priority != L:
+            assert all(gap.minutes < email.minutes for gap in leftover)
+
+
+def _gaps_between(slots: list[Slot], end: datetime) -> list[Busy]:
+    """Everything outside the slots, as busy time (so free_slots returns what is left)."""
+    edges = [at(0), *[t for s in slots for t in (s.start, s.end)], end]
+    return [Busy(edges[i], edges[i + 1]) for i in range(0, len(edges), 2)]
