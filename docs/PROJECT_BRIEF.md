@@ -92,6 +92,7 @@ backend/tests/       # mirrors services/ and routers/
 | `ANTHROPIC_MODEL` | `claude-haiku-5-5` | Cheap + fast is enough; verify current model names in Anthropic docs |
 | `AI_TIMEOUT_SECONDS` | `30` | Max seconds per Claude API call |
 | `INGEST_TOKEN` | *(secret)* | Shared secret for `POST /api/emails/ingest` (header `X-Ingest-Token`); empty = ingest disabled (503). Epic 3b |
+| `INBOX_URL` | `http://localhost:8000` | Generator only: where to deliver emails (Docker: `http://backend:8000`) |
 | `APP_TIMEZONE` | `America/Toronto` | Used by calendar planning |
 | `WORK_HOURS` | `09:00-17:00` | Working window for suggestions |
 | `WEATHER_CITY` | `Toronto` | |
@@ -308,7 +309,9 @@ unclassified emails first within each group.
   counts, brief and widgets is noted for Epic 5 (#6)
 
 **Epic 3b — Separate email generator service: in progress** (#79, stories #80–#85)
-- ⏳ Inbox ingest API with a shared token (#80)
+- ✅ Inbox ingest API with a shared token (#80)
+- ✅ Generator service backend: `generator/` project, own Claude client copy, delivers to the
+  inbox; 47 h age limit (1 h margin under the inbox's 48 h); CI job + pre-commit hooks (#81)
 
 ## 13. Roadmap
 

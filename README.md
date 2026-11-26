@@ -87,6 +87,23 @@ to generate one) and send `{"emails": [...]}` (1–50 emails) with the header
 `X-Ingest-Token`. Wrong or missing token → 401; `INGEST_TOKEN` not set → 503; any invalid
 email → 422 and nothing is saved. Emails arrive unclassified and `new`.
 
+**Run the generator service locally** (Epic 3b, `generator/`; Docker follows in 3b.4):
+set `INGEST_TOKEN` in `.env` (one value, read by both services), start the inbox
+(`cd backend && uv run uvicorn app.main:app --reload`), then in a second terminal:
+
+```bash
+cd generator
+uv sync
+uv run uvicorn app.main:app --reload --port 8001
+curl -X POST localhost:8001/api/generate -H 'Content-Type: application/json' -d '{"count": 10}'
+# -> {"generated":10,"delivered":10}; the emails are now in the inbox
+```
+
+The generator calls Claude (same key, same cost as Generate), then delivers the emails
+to `INBOX_URL` (default `http://localhost:8000`). Inbox down or wrong token → HTTP 502
+"Generated N emails but … Nothing was delivered." No key or no `INGEST_TOKEN` → 503
+before any Claude call.
+
 ## Using the inbox
 
 Open http://localhost:8080 (Docker) or http://localhost:5173 (dev). Use a normal browser
@@ -183,13 +200,15 @@ The SQLite database lives in `data/app.db`, shared by local runs and Docker
 ## Structure
 
 ```
-.github/                   CI (backend, frontend, docker jobs), Dependabot, PR/issue templates
+.github/                   CI (backend, generator, frontend, docker jobs), Dependabot, PR/issue templates
 backend/app/               FastAPI app: main.py, config, db, models, schemas
   routers/                 API endpoints (health, emails)
   services/                Claude client, prompts, generator, classifier, fallback rules
 backend/scripts/           Manual developer tools (classifier eval; never in CI)
 backend/migrations/        Alembic database migrations (applied at startup)
 backend/tests/             pytest (fakes.py = fake Claude client)
+generator/app/             Email generator service (Epic 3b): Claude client, generate, deliver to the inbox
+generator/tests/           its pytest suite (fakes: FakeAI, FakeInbox)
 frontend/src/              React app: App.tsx, api.ts (typed API client), priorities.ts, components/
 docs/                      Brief, request flow, test checklists (docs/testing/)
 data/                      SQLite file (git-ignored)
