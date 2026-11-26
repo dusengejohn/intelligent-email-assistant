@@ -28,6 +28,7 @@ in VS Code and accept "Install recommended extensions".
 cp .env.example .env
 # In .env: set ANTHROPIC_API_KEY (to generate) and INGEST_TOKEN (one random value, read by
 # both apps): python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+# Planning (Epic 4): APP_TIMEZONE (IANA name) and WORK_HOURS (HH:MM-HH:MM); checked at startup
 
 # Backend
 cd backend

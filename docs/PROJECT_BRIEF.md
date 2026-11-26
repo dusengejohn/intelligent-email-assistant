@@ -104,8 +104,8 @@ generator/           # the Email Generator (Epic 3b): own uv project, no databas
 | `AI_TIMEOUT_SECONDS` | `30` | Max seconds per Claude API call |
 | `INGEST_TOKEN` | *(secret)* | Shared secret for `POST /api/emails/ingest` (header `X-Ingest-Token`); empty = ingest disabled (503). Epic 3b |
 | `INBOX_URL` | `http://localhost:8000` | Generator only: where to deliver emails (Docker: `http://backend:8000`) |
-| `APP_TIMEZONE` | `America/Toronto` | Used by calendar planning |
-| `WORK_HOURS` | `09:00-17:00` | Working window for suggestions |
+| `APP_TIMEZONE` | `America/Toronto` | Used by calendar planning; an IANA name (DST-aware), checked at startup |
+| `WORK_HOURS` | `09:00-17:00` | Working window for suggestions, local time; `HH:MM-HH:MM`, start before end, checked at startup |
 | `WEATHER_CITY` | `Toronto` | |
 | `NEWS_FEEDS` | comma-separated RSS URLs | |
 
@@ -347,6 +347,11 @@ unclassified emails first within each group.
 - Known limits / follow-ups: a failed delivery loses the generated emails; polling is slower
   in background tabs (browser timer throttling); no idempotency for retried deliveries;
   next: Epic 4
+
+**Epic 4 — Calendar-based response planning: in progress** (#5, stories #95–#100)
+- ✅ Planning settings `APP_TIMEZONE` + `WORK_HOURS` validated at startup (fail fast); time
+  helpers in `services/clock.py` (UTC arithmetic, local only for "which day" and display;
+  DST days tested); `tzdata` for time zones on any OS (#95)
 
 **Classify with keyword rules only: done** (#92, [ADR 0002](decisions/0002-rules-only-classification.md))
 - ✅ The inbox's only classifier is the keyword rules (`services/rules.py`); the reason names
