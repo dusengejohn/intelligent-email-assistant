@@ -317,6 +317,8 @@ unclassified emails first within each group.
 - ✅ Compose: `generator` service on :8081 delivering to `http://backend:8000`; CI smoke test of
   the whole stack (health, pages, Docker DNS, token 201/401, non-root); `generator` required
   on `main`; Dependabot for `generator/` (#83)
+- ✅ Inbox: Generate removed (frontend + `/api/emails/generate`); new mail detected by polling
+  `/summary` every 15 s (`all + trash` went up) → "N new emails arrived" + reload (#84)
 
 ## 13. Roadmap
 

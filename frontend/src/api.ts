@@ -68,16 +68,6 @@ export function getSummary(): Promise<EmailSummary> {
   return request<EmailSummary>('/api/emails/summary')
 }
 
-export function generateEmails(count: number, scenario?: string): Promise<Email[]> {
-  const trimmed = scenario?.trim()
-  return request<Email[]>('/api/emails/generate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    // Leave out an empty scenario rather than sending ""
-    body: JSON.stringify(trimmed ? { count, scenario: trimmed } : { count }),
-  })
-}
-
 /** Totals over all the classify requests of one click. */
 export interface ClassifyTotals {
   classified: number
@@ -184,7 +174,7 @@ async function errorMessage(response: Response): Promise<string> {
     // Not JSON, e.g. an HTML error page from nginx
   }
   if (response.status === 504) {
-    return 'The server took too long to answer (HTTP 504). Try fewer emails.'
+    return 'The server took too long to answer (HTTP 504). Please try again.'
   }
   return `Request failed (HTTP ${response.status})`
 }

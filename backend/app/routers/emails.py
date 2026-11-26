@@ -20,21 +20,18 @@ from app.schemas import (
     EmailSummary,
     EmailUpdate,
     EmptyTrashResult,
-    GenerateRequest,
     IngestRequest,
     IngestResult,
     SortOrder,
     SourceCounts,
 )
-from app.services.ai_client import AIClient, get_ai_client, get_optional_ai_client
+from app.services.ai_client import AIClient, get_optional_ai_client
 from app.services.classifier import classify_emails
-from app.services.generator import generate_emails
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/emails", tags=["emails"])
 
 SessionDep = Annotated[Session, Depends(get_session)]
-AIDep = Annotated[AIClient, Depends(get_ai_client)]
 # Classification has a fallback, so a missing key means "use the rules", not 503
 OptionalAIDep = Annotated[AIClient | None, Depends(get_optional_ai_client)]
 
@@ -90,31 +87,6 @@ def ingest(request: IngestRequest, session: SessionDep) -> IngestResult:
     ids = [email.id for email in emails if email.id is not None]
     logger.info("Ingested %d emails (ids %s..%s)", len(ids), ids[0], ids[-1])
     return IngestResult(created=len(ids), ids=ids)
-
-
-# A plain `def` (not `async def`): the Claude call blocks for several seconds,
-# so FastAPI runs this in a worker thread and other requests keep being served.
-@router.post(
-    "/generate",
-    response_model=list[EmailRead],
-    status_code=status.HTTP_201_CREATED,
-    summary="Generate sample emails with Claude and save them",
-    responses={
-        502: {"description": "The AI call failed or produced no valid emails"},
-        503: {"description": "AI is not configured (API key missing or rejected)"},
-    },
-)
-def generate(request: GenerateRequest, session: SessionDep, ai: AIDep) -> list[Email]:
-    # 1. Talk to Claude first: if it fails, the database is never touched
-    generated = generate_emails(ai, count=request.count, scenario=request.scenario)
-
-    # 2. Save all emails in one transaction (all or nothing)
-    emails = [Email(**item.model_dump()) for item in generated]
-    session.add_all(emails)
-    session.commit()
-    for email in emails:
-        session.refresh(email)  # load the database-assigned id and defaults
-    return emails
 
 
 def _priority_order() -> list:

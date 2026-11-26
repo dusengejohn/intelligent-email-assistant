@@ -14,7 +14,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from app.config import Settings
-from app.services.ai_client import AIClient, get_ai_client
+from app.services.ai_client import AIClient, get_optional_ai_client
 from app.services.errors import AIConfigError, AIServiceError
 
 API_KEY = "sk-ant-test-key-never-logged"
@@ -83,17 +83,22 @@ def pydantic_error() -> ValidationError:
     raise AssertionError("expected a ValidationError")
 
 
-# --- get_ai_client() -------------------------------------------------------
+# --- Creating the client -------------------------------------------------------
 
 
-def test_get_ai_client_without_key_raises_config_error() -> None:
+def test_client_without_key_raises_config_error() -> None:
     with pytest.raises(AIConfigError):
-        get_ai_client(make_settings(anthropic_api_key=None))
+        AIClient(make_settings(anthropic_api_key=None))
 
 
-def test_get_ai_client_builds_sdk_with_settings() -> None:
+def test_optional_client_is_none_without_key() -> None:
+    assert get_optional_ai_client(make_settings(anthropic_api_key=None)) is None
+
+
+def test_client_builds_sdk_with_settings() -> None:
     # Creating the SDK object makes no network call; only requests do.
-    client = get_ai_client(make_settings(ai_timeout_seconds=12))
+    client = get_optional_ai_client(make_settings(ai_timeout_seconds=12))
+    assert client is not None
 
     sdk = client.sdk
     assert isinstance(sdk, anthropic.Anthropic)

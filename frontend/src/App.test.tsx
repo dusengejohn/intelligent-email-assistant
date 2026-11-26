@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The whole page against a small in-memory fake backend: views, reading pane,
 // delete/undo/restore, empty trash, and the requests the page sends.
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -141,7 +141,13 @@ describe('App: list and views', () => {
     render(<App />)
 
     expect(screen.getByRole('button', { name: /Classify/ })).toBeInTheDocument()
-    expect(screen.getByLabelText(/Scenario/)).toBeInTheDocument()
+    // Generating moved to the separate Email Generator (story 3b.5)
+    expect(screen.queryByRole('button', { name: /Generate/ })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Scenario/)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Email Generator' })).toHaveAttribute(
+      'href',
+      'http://localhost:8081',
+    )
     const views = screen.getByRole('navigation', { name: 'Views' })
     expect(await within(views).findByRole('button', { name: /All/ })).toHaveTextContent('2')
     expect(within(views).getByRole('button', { name: /Unclassified/ })).toHaveTextContent('1')
@@ -335,5 +341,122 @@ describe('App: alerts for new urgent emails', () => {
 
     expect(requestPermission).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Enable desktop alerts' })).toBeInTheDocument()
+  })
+})
+
+describe('App: new mail arrives from the generator (polling)', () => {
+  // Fake clock: a test jumps 15 s ahead instantly. shouldAdvanceTime keeps
+  // promises and short waits working; userEvent must use the same clock.
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  const summaryCalls = (requests: string[]) =>
+    requests.filter((r) => r === '/api/emails/summary').length
+
+  async function nextPoll() {
+    await act(() => vi.advanceTimersByTimeAsync(15_000))
+  }
+
+  it('asks for the counts every 15 seconds', async () => {
+    const { requests } = fakeApi([email(1, 'One', 'low')])
+    render(<App />)
+    await screen.findByRole('list', { name: 'Emails' })
+    const before = summaryCalls(requests)
+
+    await nextPoll()
+    await nextPoll()
+
+    expect(summaryCalls(requests)).toBe(before + 2)
+  })
+
+  it('shows "N new emails arrived" and reloads the list when mail arrives', async () => {
+    const { db } = fakeApi([email(1, 'One', 'low')])
+    render(<App />)
+    await screen.findByRole('list', { name: 'Emails' })
+
+    // The generator delivers two emails (through the ingest API)
+    db.push(email(2, 'Arrived A', null), email(3, 'Arrived B', null))
+    await nextPoll()
+
+    expect(await screen.findByText('2 new emails arrived', { selector: 'span' })).toBeInTheDocument()
+    await waitFor(() => expect(subjects()).toEqual(['One', 'Arrived A', 'Arrived B']))
+    const views = screen.getByRole('navigation', { name: 'Views' })
+    expect(within(views).getByRole('button', { name: /Unclassified/ })).toHaveTextContent('2')
+  })
+
+  it('says nothing when no mail arrived', async () => {
+    const { requests } = fakeApi([email(1, 'One', 'low')])
+    render(<App />)
+    await screen.findByRole('list', { name: 'Emails' })
+    const listLoads = requests.filter((r) => r === '/api/emails').length
+
+    await nextPoll()
+
+    expect(screen.queryByText(/arrived/)).not.toBeInTheDocument()
+    // no list reload either: only the counts were asked for
+    expect(requests.filter((r) => r === '/api/emails').length).toBe(listLoads)
+  })
+
+  it('does not call a delete and its Undo "new mail"', async () => {
+    fakeApi([email(1, 'One', 'low'), email(2, 'Two', 'low')])
+    render(<App />)
+    await screen.findByRole('list', { name: 'Emails' })
+    await openRow('Two')
+    const u = user()
+
+    await u.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(subjects()).toEqual(['One']))
+    await u.click(screen.getByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(subjects()).toEqual(['One', 'Two']))
+    await nextPoll()
+
+    expect(screen.queryByText(/arrived/)).not.toBeInTheDocument()
+  })
+
+  it('keeps an Undo toast and shows the arrival in the status line instead', async () => {
+    const { db } = fakeApi([email(1, 'One', 'low'), email(2, 'Two', 'low')])
+    render(<App />)
+    await screen.findByRole('list', { name: 'Emails' })
+    // Delete ~10 s after load: the Undo toast (8 s) is still up at the 15 s poll
+    await act(() => vi.advanceTimersByTimeAsync(10_000))
+    await openRow('Two')
+    await user().click(screen.getByRole('button', { name: 'Delete' }))
+    await screen.findByRole('button', { name: 'Undo' })
+
+    db.push(email(3, 'Arrived', null))
+    await act(() => vi.advanceTimersByTimeAsync(5_000))
+
+    expect(await screen.findByText('1 new email arrived')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument()
+  })
+
+  it('stays quiet when a poll fails (the backend may be restarting)', async () => {
+    fakeApi([email(1, 'One', 'low')])
+    render(<App />)
+    await screen.findByRole('list', { name: 'Emails' })
+
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))))
+    await nextPoll()
+
+    expect(screen.queryByText(/Cannot reach the server/)).not.toBeInTheDocument()
+    expect(subjects()).toEqual(['One'])
+  })
+
+  it('stops polling when the page is closed (timer cleanup)', async () => {
+    const { requests } = fakeApi([email(1, 'One', 'low')])
+    const { unmount } = render(<App />)
+    await screen.findByRole('list', { name: 'Emails' })
+
+    unmount()
+    const before = summaryCalls(requests)
+    await nextPoll()
+
+    expect(summaryCalls(requests)).toBe(before)
   })
 })

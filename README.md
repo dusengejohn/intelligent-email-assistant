@@ -59,9 +59,11 @@ priorities, tests, CI) works without a key, and classification falls back to key
 | Classify 20 emails (1 call, ~5–10 s) | about **$0.0008** |
 | Classify 105 emails (one click = 3 requests, ~26 s) | about **$0.008** |
 
-- Every call logs its tokens: `docker compose logs backend | grep "Claude call"`.
-- No key → the app still works; **Generate** shows *"AI is not configured: set
-  ANTHROPIC_API_KEY in .env"* (HTTP 503), and **Classify** uses the keyword rules (HTTP 200).
+- Every call logs its tokens: `docker compose logs backend | grep "Claude call"` (classify)
+  and `docker compose logs generator | grep "Claude call"` (generate).
+- No key → the app still works; **Generate** (on the generator page, :8081) shows *"AI is not
+  configured: set ANTHROPIC_API_KEY in .env"* (HTTP 503), and **Classify** uses the keyword
+  rules (HTTP 200).
 - **Tests and CI never call Claude** and need no key: the AI client is replaced by a fake
   (`backend/tests/fakes.py`), and GitHub has no API key secret on purpose.
 
@@ -77,9 +79,10 @@ card: it becomes `manual` and is never overwritten by later classifications.
 `cd backend && uv run python -m scripts.eval_classifier --runs 3`. Results and caveats:
 [docs/testing/epic-2-eval.md](docs/testing/epic-2-eval.md).
 
-**Generate emails:** open http://localhost:8080 (Docker) or http://localhost:5173 (dev),
-choose 1–50 and click **Generate emails**; or use the API docs at
-http://localhost:8000/docs (`POST /api/emails/generate` → *Try it out*).
+**Generate emails:** since Epic 3b the inbox doesn't generate any more. Use the separate
+**Email Generator** at http://localhost:8081 (Docker; dev: see below): choose 1–50 and click
+**Generate**. The inbox notices the new emails by itself within ~15 s ("10 new emails
+arrived"), without a page reload.
 
 **Deliver emails from another service** (`POST /api/emails/ingest`, used by the separate
 generator service of Epic 3b): set `INGEST_TOKEN` in `.env` (see `.env.example` for how
@@ -120,7 +123,8 @@ Open http://localhost:8080 (Docker) or http://localhost:5173 (dev). Use a normal
 (Firefox, Edge, Chrome): VS Code's built-in browser doesn't send the requests that change
 data (see `docs/testing/epic-3.md`).
 
-- **Layout:** toolbar on top (Generate, Classify, desktop alerts, health), views on the
+- **Layout:** toolbar on top (Classify, a link to the Email Generator, desktop alerts,
+  health), views on the
   left, the email list in the middle (it scrolls; the column header stays put) and the
   **reading pane** when an email is open (side by side on wide screens; on narrower ones
   it replaces the list, with "Back to list").
@@ -139,6 +143,10 @@ data (see `docs/testing/epic-3.md`).
   critical** appears when new urgent emails were classified. **Enable desktop alerts**
   (top right) adds a system notification when the tab is in the background; the browser
   asks for permission only when you click it.
+- **New mail:** every 15 s the page asks for the counts (`GET /api/emails/summary`, no AI).
+  When emails arrived, it reloads the list and shows "N new emails arrived" (a toast, or the
+  status line while an Undo toast is up; a desktop notification if enabled and the tab is
+  hidden). Deletes, Undo and Restore never count as new mail.
 - **Keyboard:** Tab to a view or a row and press Enter to open it; Esc closes the
   confirmation dialog.
 
@@ -226,7 +234,7 @@ The SQLite database lives in `data/app.db`, shared by local runs and Docker
 .github/                   CI (backend, generator, frontend, docker jobs), Dependabot, PR/issue templates
 backend/app/               FastAPI app: main.py, config, db, models, schemas
   routers/                 API endpoints (health, emails)
-  services/                Claude client, prompts, generator, classifier, fallback rules
+  services/                Claude client, prompts, classifier, fallback rules
 backend/scripts/           Manual developer tools (classifier eval; never in CI)
 backend/migrations/        Alembic database migrations (applied at startup)
 backend/tests/             pytest (fakes.py = fake Claude client)
