@@ -1,8 +1,8 @@
 """The only place in the generator that talks to the Claude API (brief §9).
 
-A copy of the inbox's `backend/app/services/ai_client.py` (decision, story 3b.2):
-the two services stay independent (each can upgrade the SDK on its own), and the
-duplication is small. Fix a bug here? Check the inbox's copy too.
+Started as a copy of the inbox's client (story 3b.2, so each service could upgrade
+the SDK on its own). Since #92 the inbox has no AI client, so this is the project's
+only Claude caller.
 
 Everything else calls `AIClient.parse(...)` and gets back a validated Pydantic
 object, or one of two errors: `AIConfigError` / `AIServiceError`.

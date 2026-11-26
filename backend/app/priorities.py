@@ -1,7 +1,7 @@
 """Brief §7 as code: the single source of truth for what each priority means.
 
-Used by the rule-based fallback (services/fallback.py), the AI prompt (story 2.2)
-and mirrored by the frontend for colors (story 2.5). Change the definitions here,
+Used by the keyword rules (services/rules.py) for labels and reply times, and
+mirrored by the frontend for colors (story 2.5). Change the definitions here,
 not in several places.
 """
 

@@ -8,18 +8,16 @@ Guidance for Claude Code when working in this repository.
     `db.py`, `models.py` (tables), `schemas.py` (API + AI shapes), `priorities.py`
     (brief §7 as code: the single source for priority meanings, colors, default minutes);
   - `app/routers/` — endpoints (`health.py`, `emails.py`);
-  - `app/services/` — `ai_client.py` (the only Claude caller), `prompts.py`,
-    `classifier.py` (AI in batches + per-email fallback),
-    `fallback.py` (rule-based classifier, no AI), `errors.py`;
+  - `app/services/` — `rules.py` (`classify_by_rules`: the keyword classifier, the inbox's
+    only one; the reason names the matched keywords). **No AI in the inbox** (#92, ADR 0002);
   - `migrations/` + `alembic.ini` — Alembic database migrations, applied at startup by
     `app/db.py` `migrate_database()` (existing pre-Alembic databases are stamped at `0001`);
-  - `scripts/` — developer tools run by hand, never in CI (`uv run python -m scripts.<name>`),
-    e.g. `eval_classifier.py` (AI vs rules accuracy; calls the real API);
-  - `tests/` mirrors `app/`; `tests/fakes.py` holds the shared `FakeAI`;
-    `tests/data/labelled_emails.py` is the hand-labelled set for classifier tests.
+  - `tests/` mirrors `app/`; `tests/data/labelled_emails.py` is the hand-labelled set for
+    the rules (`tests/services/test_rules.py`, ≥ 80 % in CI).
 - `generator/` — the **Email Generator** service (Epic 3b), a separate uv project with its own
   `pyproject.toml`/`uv.lock`: `app/routers/generate.py` (`POST /api/generate`),
-  `app/services/` — `ai_client.py` + `errors.py` (**copies** of the inbox's; fix bugs in both),
+  `app/services/` — `ai_client.py` + `errors.py` (originally copies of the inbox's, which
+  no longer has an AI client since #92),
   `generator.py`, `prompts.py`, `inbox.py` (`InboxClient`: delivers to the inbox's
   `/api/emails/ingest` with `X-Ingest-Token`; the only caller of the inbox). No database.
   Emails may be at most 47 h old (inbox: 48 h) so they're still valid on delivery.
@@ -82,16 +80,19 @@ Guidance for Claude Code when working in this repository.
 - CI fails on lint errors, unformatted code, or a stale `uv.lock` — run
   `ruff check`, `ruff format` and `pytest` before committing.
 - Copy `.env.example` to `.env` for local config; never commit `.env`.
-- Claude is called **only** through `backend/app/services/ai_client.py` (`AIClient.parse`);
-  tests pass a fake SDK client (`sdk_client=`) and never use the network or a real key.
+- Claude is called **only** by the generator, through `generator/app/services/ai_client.py`
+  (`AIClient.parse`); tests pass a fake SDK client (`sdk_client=`) and never use the network
+  or a real key. The inbox must not import `anthropic` (a test checks it).
 - **Soft delete:** trashed emails (`deleted_at` set) must stay invisible. New queries in
   `routers/emails.py` filter with `_active()`; single-email actions use `_get_or_404()`.
 - **Manual browser checks:** use a normal browser (Firefox/Edge/Chrome, not VS Code's built-in
   one, which drops POST/PATCH/DELETE) and confirm each step in the nginx log
   (`docker compose logs frontend`, user agent shows the browser); prefer `--tail` over `--since`.
-- AI features **with** a fallback depend on `get_optional_ai_client` (no key → `None` → fallback,
-  HTTP 200). The inbox has no AI feature **without** a fallback since Generate moved to
-  `generator/` (3b.5); a new one (e.g. Epic 5) needs a strict dependency again (no key → 503).
+- **Classification is keyword rules only** (`rules.py`, source `rules`; old emails may still
+  say `ai`). Bulk Classify never overwrites a priority; "Classify by keywords" on one email
+  does. An AI feature in the inbox (e.g. Epic 5's brief) needs a new decision (ADR) first.
+- **Data migrations:** autogenerate only sees schema changes; value changes (like 0003
+  `FALLBACK` → `RULES`) are hand-written `UPDATE`s with an exact downgrade and a test on rows.
 - **The inbox never generates:** emails arrive via `POST /api/emails/ingest` (validated with
   `IncomingEmail`). The page notices them by polling `/summary` (`src/arrivals.ts`: new mail =
   `all + trash` went up; deletes/restores don't count).

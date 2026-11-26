@@ -1,5 +1,11 @@
 # Classifier eval: AI vs rules (story 2.6)
 
+> **Historical (since #92):** the inbox no longer uses AI to classify; the keyword rules are
+> its only classifier ([ADR 0002](../decisions/0002-rules-only-classification.md)), and the
+> eval script `scripts/eval_classifier.py` was removed with the AI classifier. The numbers
+> below are kept as the record of why: rules 96 % vs Claude 83–91 % on the labelled set.
+> The rules' accuracy is still checked in CI (`backend/tests/services/test_rules.py`, ≥ 80 %).
+
 > **What this is:** the first measured comparison of the two classifiers against the
 > hand-labelled emails (`backend/tests/data/labelled_emails.py`, 23 emails written from
 > the brief §7 meanings only). Re-run it after any change to the prompt, the rules, the

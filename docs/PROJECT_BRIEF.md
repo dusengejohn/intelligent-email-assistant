@@ -45,7 +45,7 @@ generator container (FastAPI, host :8081)        nginx (frontend container :80, 
   ├── Anthropic Claude API (generate)                                                       ▼
   └── delivers: POST http://backend:8000/api/emails/ingest ──────► FastAPI backend (container :8000)
                 (X-Ingest-Token, Docker network)                    ├── SQLite  (./data/app.db, volume)
-                                                                    ├── Anthropic Claude API (classify; rules-only planned in #92)
+                                                                    ├── keyword rules classify (no AI, #92)
                                                                     ├── Calendar source (mock JSON/.ics → Google/Outlook later)
                                                                     ├── Open-Meteo (weather, no key)
                                                                     └── RSS feeds (news)
@@ -162,7 +162,10 @@ unclassified emails first within each group.
 - Saved to SQLite; returns created emails. Missing API key → HTTP 503 with clear message.
 - `GET /api/emails?priority=&status=` and `GET /api/emails/{id}`.
 
-### Epic 2 — Priority classification (AI + fallback) (done)
+### Epic 2 — Priority classification (AI + fallback) (done; AI removed in #92)
+> **Changed (2026-11-26, #92, [ADR 0002](decisions/0002-rules-only-classification.md)):** the
+> inbox now classifies with the keyword rules only (source `rules`); the reason names the
+> matched keywords. The text below describes the original Epic 2 design.
 - `POST /api/emails/classify` classifies all unclassified emails (also `/api/emails/{id}/classify`).
 - AI returns per email: `{ "priority", "reason", "suggested_response_minutes" }` — validated.
 - **Fallback classifier** (pure Python keyword/rule based) used when the API is missing,
@@ -222,12 +225,15 @@ unclassified emails first within each group.
 
 ## 9. AI design rules
 
-- One small wrapper (`services/ai_client.py`) owns the Anthropic client, model, timeout
+- **Where AI is used:** only the Email Generator writes emails with Claude. The inbox
+  classifies with deterministic keyword rules (#92, ADR 0002); adding AI back to the inbox
+  needs a new decision.
+- One small wrapper (`services/ai_client.py`, in `generator/`) owns the Anthropic client, model, timeout
   (~30 s), retries (1), and JSON parsing — routers never call the SDK directly.
 - Prompts live in code as constants (or `services/prompts.py`), are short, and specify the
   **exact JSON schema** expected. Parse → validate with Pydantic → on failure use fallback.
-- Keep cost low: cheap model, `count ≤ 50`, classify in batches, no AI calls on page load
-  except `/api/brief` (cache it).
+- Keep cost low: cheap model, `count ≤ 50`, no AI calls on page load except `/api/brief`
+  (cache it).
 - Data is synthetic (generated emails); connecting a real mailbox is **out of scope** for now.
 
 ## 10. Non-functional requirements
@@ -340,7 +346,17 @@ unclassified emails first within each group.
   Claude client instead of a shared library; polling instead of push
 - Known limits / follow-ups: a failed delivery loses the generated emails; polling is slower
   in background tabs (browser timer throttling); no idempotency for retried deliveries;
-  **next: classify with keyword rules only, no AI in the inbox (#92)**, then Epic 4
+  next: Epic 4
+
+**Classify with keyword rules only: done** (#92, [ADR 0002](decisions/0002-rules-only-classification.md))
+- ✅ The inbox's only classifier is the keyword rules (`services/rules.py`); the reason names
+  the matched keywords (≤ 4, ≤ 200 characters); "Classify by keywords" on one email
+- ✅ Source `fallback` → `rules` with the first **data migration** (`0003`), tested both ways;
+  verified on the real database (10 rows) after a backup
+- ✅ Removed from the inbox: AI classifier, prompt, Claude client, AI settings, eval script,
+  `anthropic`; a test keeps `anthropic` out of `backend/app`
+- Decisions: John prefers predictable, explainable, free classification; Claude's 140 earlier
+  labels stay (`ai`); bulk Classify never overwrites a label
 
 ## 13. Roadmap
 

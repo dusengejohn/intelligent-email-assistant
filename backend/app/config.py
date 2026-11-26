@@ -8,7 +8,7 @@ variables, so no `.env` file exists inside the container.
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Paths are resolved from this file's location, not the current directory, so
@@ -27,19 +27,17 @@ class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str = DEFAULT_DATABASE_URL
 
-    # Optional: the app must start without it. SecretStr prints as '**********'.
-    anthropic_api_key: SecretStr | None = None
-    anthropic_model: str = "claude-haiku-5-5"
-    ai_timeout_seconds: int = Field(default=30, gt=0)
+    # No AI settings: the inbox classifies with keyword rules only (#92). The
+    # shared .env's ANTHROPIC_* keys are for the generator and ignored here.
 
     # Shared secret that other services (the generator) send in the
     # X-Ingest-Token header to deliver emails. Not set = ingest disabled (503).
     ingest_token: SecretStr | None = None
 
-    @field_validator("anthropic_api_key", "ingest_token", mode="before")
+    @field_validator("ingest_token", mode="before")
     @classmethod
     def blank_secret_means_not_configured(cls, value: object) -> object:
-        # `ANTHROPIC_API_KEY=` (copied from .env.example) arrives as "" — treat as missing
+        # `INGEST_TOKEN=` (copied from .env.example) arrives as "" — treat as missing
         if isinstance(value, str) and not value.strip():
             return None
         return value

@@ -5,18 +5,13 @@ DELETE /trash empties the Trash for good. Trashed emails are invisible
 everywhere else.
 """
 
-from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from app.main import app
 from app.models import ClassificationSource, Email, EmailStatus, Priority
-from app.services.ai_client import get_optional_ai_client
-from tests.fakes import EchoClassifierAI
 
 URL = "/api/emails"
 NOW = datetime(2026, 11, 23, 12, 0, tzinfo=UTC)
@@ -58,14 +53,6 @@ def delete(client: TestClient, email_id: int | None) -> Any:
     return client.delete(f"{URL}/{email_id}")
 
 
-@pytest.fixture
-def fake_ai() -> Iterator[EchoClassifierAI]:
-    ai = EchoClassifierAI(priority="low")
-    app.dependency_overrides[get_optional_ai_client] = lambda: ai
-    yield ai
-    app.dependency_overrides.pop(get_optional_ai_client, None)
-
-
 # --- delete (move to Trash) ---------------------------------------------------------
 
 
@@ -96,16 +83,14 @@ def test_trashed_emails_are_left_out_of_the_summary(client: TestClient, session:
     assert summary["trash"] == 1
 
 
-def test_bulk_classify_ignores_trashed_emails(
-    client: TestClient, session: Session, fake_ai: EchoClassifierAI
-) -> None:
+def test_bulk_classify_ignores_trashed_emails(client: TestClient, session: Session) -> None:
     active = add_email(session, "active")
     trashed = add_email(session, "trashed")
     delete(client, trashed.id)
 
     body = client.post(f"{URL}/classify").json()
 
-    assert fake_ai.sent_ids() == [active.id]  # the trashed email never reaches the AI
+    assert [e["id"] for e in body["emails"]] == [active.id]  # the trashed email stays as is
     assert body["classified"] == 1
     assert body["remaining"] == 0  # the trashed, unclassified email isn't "remaining"
 
@@ -189,14 +174,14 @@ def test_restore_active_or_unknown_returns_404(client: TestClient, session: Sess
 
 
 def test_trashed_email_cannot_be_changed_or_classified(
-    client: TestClient, session: Session, fake_ai: EchoClassifierAI
+    client: TestClient, session: Session
 ) -> None:
     email = add_email(session, "in trash")
     delete(client, email.id)
 
     assert client.patch(f"{URL}/{email.id}", json={"priority": "high"}).status_code == 404
     assert client.post(f"{URL}/{email.id}/classify").status_code == 404
-    assert fake_ai.calls == []
+    assert session.get(Email, email.id).priority is None  # type: ignore[union-attr]
 
 
 # --- summary consistency (extends story 3.1) ----------------------------------------------

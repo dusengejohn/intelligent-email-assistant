@@ -146,48 +146,37 @@ function fakeFetchSequence(...responses: Response[]) {
   return mock
 }
 
-/** One POST /api/emails/classify answer. */
-function classifyAnswer(classified: number, ai: number, remaining: number): Response {
-  return jsonResponse(200, {
-    classified,
-    by_source: { ai, fallback: classified - ai },
-    remaining,
-    emails: [],
-  })
+/** One POST /api/emails/classify answer (keyword rules only since #92: no by_source). */
+function classifyAnswer(classified: number, remaining: number): Response {
+  return jsonResponse(200, { classified, remaining, emails: [] })
 }
 
 describe('classifyEmails', () => {
   it('calls again until remaining is 0 and adds up the totals', async () => {
     const mock = fakeFetchSequence(
-      classifyAnswer(50, 50, 55),
-      classifyAnswer(50, 48, 5),
-      classifyAnswer(5, 5, 0),
+      classifyAnswer(50, 55),
+      classifyAnswer(50, 5),
+      classifyAnswer(5, 0),
     )
     const progress: number[] = []
 
     const totals = await classifyEmails((done) => progress.push(done))
 
-    expect(totals).toEqual({ classified: 105, ai: 103, fallback: 2, critical: 0, high: 0 })
+    expect(totals).toEqual({ classified: 105, critical: 0, high: 0 })
     expect(mock).toHaveBeenCalledTimes(3)
     expect(mock).toHaveBeenCalledWith('/api/emails/classify', { method: 'POST' })
     expect(progress).toEqual([50, 100, 105])
   })
 
   it('makes one call when there is nothing to classify', async () => {
-    const mock = fakeFetchSequence(classifyAnswer(0, 0, 0))
+    const mock = fakeFetchSequence(classifyAnswer(0, 0))
 
-    expect(await classifyEmails()).toEqual({
-      classified: 0,
-      ai: 0,
-      fallback: 0,
-      critical: 0,
-      high: 0,
-    })
+    expect(await classifyEmails()).toEqual({ classified: 0, critical: 0, high: 0 })
     expect(mock).toHaveBeenCalledTimes(1)
   })
 
   it('stops when a call makes no progress (guards against an endless loop)', async () => {
-    const mock = fakeFetchSequence(classifyAnswer(10, 10, 5), classifyAnswer(0, 0, 5))
+    const mock = fakeFetchSequence(classifyAnswer(10, 5), classifyAnswer(0, 5))
 
     const totals = await classifyEmails()
 
@@ -196,7 +185,7 @@ describe('classifyEmails', () => {
   })
 
   it('stops after at most 20 requests', async () => {
-    const answers = Array.from({ length: 25 }, () => classifyAnswer(50, 50, 999))
+    const answers = Array.from({ length: 25 }, () => classifyAnswer(50, 999))
     const mock = fakeFetchSequence(...answers)
 
     const totals = await classifyEmails()
@@ -206,7 +195,7 @@ describe('classifyEmails', () => {
   })
 
   it('passes on a backend error', async () => {
-    fakeFetchSequence(classifyAnswer(50, 50, 55), jsonResponse(502, { detail: 'AI service error: x' }))
+    fakeFetchSequence(classifyAnswer(50, 55), jsonResponse(502, { detail: 'AI service error: x' }))
 
     const err = await apiError(() => classifyEmails())
 
@@ -318,7 +307,6 @@ describe('classifyEmails counts new urgent emails (for alerts)', () => {
     const answer = (priorities: Email['priority'][], remaining: number) =>
       jsonResponse(200, {
         classified: priorities.length,
-        by_source: { ai: priorities.length, fallback: 0 },
         remaining,
         emails: priorities.map((priority, i) => ({ ...EMAIL, id: i, priority })),
       })

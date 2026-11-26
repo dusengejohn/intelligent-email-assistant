@@ -1,8 +1,8 @@
 """Hand-labelled sample emails: each one has the priority a person would expect.
 
 Labels follow ONLY the brief §7 meanings (written before any classifier rule, to
-avoid fitting the labels to the rules). Used by the fallback tests (story 2.1) and
-the accuracy eval (story 2.6). All people and companies are fictional.
+avoid fitting the labels to the rules). Used by the keyword-rules tests
+(tests/services/test_rules.py; story 2.1, #92). All people and companies are fictional.
 
 Brief §7:
 - critical: outage, security incident, legal/compliance, exec escalation, deadline today

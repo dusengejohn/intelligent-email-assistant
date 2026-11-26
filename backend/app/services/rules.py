@@ -1,8 +1,9 @@
-"""Rule-based priority classifier: no AI, no network, always available.
+"""Keyword-rules priority classifier: the inbox's only classifier (no AI since #92).
 
-Used when Claude isn't configured, fails, or returns invalid output (story 2.2).
-The rules are an ORDERED table: the first rule that matches decides, so more
-urgent rules come first. Order (see RULES below):
+Deterministic and explainable: the same text always gets the same priority, and
+the reason names the keywords that decided it. No AI, no network, always available.
+The rules are an ORDERED table: the first rule that matches decides the priority,
+so more urgent rules come first. Order (see RULES below):
 
   1. critical words  (outage, breach, legal, deadline today, exec escalation, ...)
   2. clear low markers (newsletter, digest, FYI, ...) - before "high", so a
@@ -10,13 +11,17 @@ urgent rules come first. Order (see RULES below):
   3. high words      (customer, blocked, tomorrow, ASAP, escalation, ...)
   4. automated sender (noreply@, alerts@, ...) -> low
   5. nothing matched -> moderate (a normal work request)
+
+The reason then lists every keyword of the DECIDING priority (all its rules, in
+the order found, without duplicates, at most MAX_KEYWORDS), e.g.
+'Critical: matched "outage", "database is down" (an outage, a service that is down).'
 """
 
 import re
 from dataclasses import dataclass
 
 from app.models import ClassificationSource, Email, Priority
-from app.priorities import default_minutes
+from app.priorities import PRIORITIES, default_minutes
 from app.schemas import Classification
 
 
@@ -119,29 +124,68 @@ AUTOMATED_SENDER = re.compile(
 )
 
 
+MAX_KEYWORDS = 4  # keywords named in a reason
+MAX_KEYWORD_CHARS = 40  # a match like "website is unreachable" stays readable
+MAX_REASON_CHARS = 200  # Classification.reason limit
+
+
 def _result(priority: Priority, reason: str) -> Classification:
     return Classification(
         priority=priority,
         reason=reason,
         suggested_response_minutes=default_minutes(priority),
-        source=ClassificationSource.FALLBACK,
+        source=ClassificationSource.RULES,
     )
 
 
-def classify_fallback(email: Email) -> Classification:
+def _matches(rule: Rule, text: str) -> list[str]:
+    """Every keyword this rule finds in the text (empty if its condition fails)."""
+    if rule.also is not None and not rule.also.search(text):
+        return []
+    return [m.group(0).strip()[:MAX_KEYWORD_CHARS] for m in rule.pattern.finditer(text)]
+
+
+def _keyword_reason(priority: Priority, text: str) -> str:
+    """'<Priority>: matched "a", "b" (signal, signal).' with every keyword of that priority."""
+    keywords: list[str] = []
+    signals: list[str] = []
+    for rule in RULES:
+        if rule.priority != priority:
+            continue
+        found = _matches(rule, text)
+        if not found:
+            continue
+        if rule.signal not in signals:
+            signals.append(rule.signal)
+        for keyword in found:
+            # One mention per keyword, ignoring case ("Customer" and "customer")
+            if keyword.lower() not in (k.lower() for k in keywords):
+                keywords.append(keyword)
+
+    label = PRIORITIES[priority].label
+    for count in range(min(len(keywords), MAX_KEYWORDS), 0, -1):
+        quoted = ", ".join(f'"{k}"' for k in keywords[:count])
+        # Name the signals if they fit, else just the keywords; fewer keywords as a last resort
+        for reason in (
+            f"{label}: matched {quoted} ({', '.join(signals)}).",
+            f"{label}: matched {quoted}.",
+        ):
+            if len(reason) <= MAX_REASON_CHARS:
+                return reason
+    raise AssertionError("unreachable: one keyword always fits")  # pragma: no cover
+
+
+def classify_by_rules(email: Email) -> Classification:
     """Classify one email with the rules above. Never fails."""
     text = f"{email.subject}\n{email.body}"
     for rule in RULES:
-        match = rule.pattern.search(text)
-        if match and (rule.also is None or rule.also.search(text)):
-            found = match.group(0)[:40]
-            return _result(rule.priority, f'Mentions "{found}", which signals {rule.signal}.')
+        if _matches(rule, text):
+            # The first matching rule decides the priority; the reason names
+            # every keyword of that priority
+            return _result(rule.priority, _keyword_reason(rule.priority, text))
 
     if AUTOMATED_SENDER.match(email.sender_email):
         sender = email.sender_email.split("@")[0]
-        return _result(L, f'Sent by an automated address ("{sender}@"), so likely a notification.')
+        return _result(L, f'Low: sent by an automated address ("{sender}@").')
 
-    return _result(
-        Priority.MODERATE,
-        "No urgent or low-priority signals found, so treated as a normal work request.",
-    )
+    return _result(Priority.MODERATE, "Moderate: no urgent or low-priority keywords found.")

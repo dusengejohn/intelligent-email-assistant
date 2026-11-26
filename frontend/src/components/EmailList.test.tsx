@@ -26,7 +26,7 @@ function email(id: number, priority: Email['priority'], source: Email['classific
 }
 
 // Badges of very different widths: with content-sized parts, the columns drifted apart
-const EMAILS = [email(1, 'critical', 'ai'), email(2, 'moderate', 'fallback'), email(3, null, null)]
+const EMAILS = [email(1, 'critical', 'ai'), email(2, 'moderate', 'rules'), email(3, null, null)]
 
 function renderList(props: Partial<Parameters<typeof EmailList>[0]> = {}) {
   render(

@@ -18,8 +18,8 @@ class Priority(StrEnum):
 
 
 class ClassificationSource(StrEnum):
-    AI = "ai"
-    FALLBACK = "fallback"
+    AI = "ai"  # by Claude, before #92 (kept on old emails)
+    RULES = "rules"  # by the keyword rules (stored as "FALLBACK" before migration 0003)
     MANUAL = "manual"
 
 
