@@ -181,7 +181,7 @@ function App() {
       setNotice(
         totals.classified === 0
           ? 'Nothing to classify: every email already has a priority.'
-          : `Classified ${totals.classified} emails: ${totals.ai} by AI, ${totals.fallback} by rules.`,
+          : `Classified ${totals.classified} email${totals.classified === 1 ? '' : 's'} by keywords.`,
       )
       announceUrgent(totals)
     } catch (err) {

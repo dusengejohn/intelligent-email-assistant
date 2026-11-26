@@ -4,7 +4,6 @@ Rows are inserted directly into the in-memory database (`session` fixture).
 No AI is involved.
 """
 
-from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
 
@@ -12,10 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from app.main import app
 from app.models import ClassificationSource, Email, EmailStatus, Priority
-from app.services.ai_client import get_optional_ai_client
-from tests.fakes import EchoClassifierAI
 
 
 def add_email(session: Session, **fields: Any) -> Email:
@@ -186,17 +182,7 @@ def test_non_numeric_id_returns_422(client: TestClient) -> None:
 # --- works together with bulk classify (story 2.3) -------------------------------------
 
 
-@pytest.fixture
-def fake_ai() -> Iterator[EchoClassifierAI]:
-    ai = EchoClassifierAI(priority="critical")
-    app.dependency_overrides[get_optional_ai_client] = lambda: ai
-    yield ai
-    app.dependency_overrides.pop(get_optional_ai_client, None)
-
-
-def test_manual_override_survives_bulk_classify(
-    client: TestClient, session: Session, fake_ai: EchoClassifierAI
-) -> None:
+def test_manual_override_survives_bulk_classify(client: TestClient, session: Session) -> None:
     email = add_email(
         session,
         priority=None,
@@ -206,9 +192,9 @@ def test_manual_override_survives_bulk_classify(
     )
     patch(client, email.id, {"priority": "low"})
 
-    client.post("/api/emails/classify")
+    body = client.post("/api/emails/classify").json()
 
-    assert fake_ai.calls == []  # nothing unclassified, so the AI was never asked
+    assert body["classified"] == 0  # nothing unclassified: the manual priority wins
     after = snapshot(session, email.id)
     assert after["priority"] == Priority.LOW
     assert after["classification_source"] == ClassificationSource.MANUAL

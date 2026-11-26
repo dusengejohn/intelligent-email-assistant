@@ -116,7 +116,7 @@ class EmailRead(BaseModel):
 
 
 class Classification(BaseModel):
-    """One email's priority, from the AI, the fallback rules or a person."""
+    """One email's priority, from the keyword rules or a person (Claude before #92)."""
 
     priority: Priority
     reason: str = Field(min_length=1, max_length=200, description="One sentence")
@@ -124,31 +124,10 @@ class Classification(BaseModel):
     source: ClassificationSource
 
 
-class RawClassification(BaseModel):
-    """One AI classification exactly as Claude returns it (shape only, no rules)."""
-
-    email_id: int
-    priority: str
-    reason: str
-    suggested_response_minutes: int
-
-
-class ClassificationBatch(BaseModel):
-    """The JSON object Claude must return when classifying: `{"results": [...]}`."""
-
-    results: list[RawClassification]
-
-
-class SourceCounts(BaseModel):
-    ai: int
-    fallback: int
-
-
 class ClassifyResult(BaseModel):
     """Response of POST /api/emails/classify."""
 
-    classified: int = Field(description="Emails classified by this request")
-    by_source: SourceCounts
+    classified: int = Field(description="Emails classified by this request (keyword rules)")
     remaining: int = Field(description="Unclassified emails left; call again if > 0")
     emails: list[EmailRead] = Field(description="The emails classified by this request")
 

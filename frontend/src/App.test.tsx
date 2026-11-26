@@ -66,9 +66,9 @@ function fakeApi(initial: Email[], classifyAs: Record<number, Email['priority']>
         const done = active().filter((e) => !e.priority)
         for (const e of done) {
           e.priority = classifyAs[e.id] ?? 'low'
-          e.classification_source = 'ai'
+          e.classification_source = 'rules'
         }
-        return json({ classified: done.length, by_source: { ai: done.length, fallback: 0 }, remaining: 0, emails: done })
+        return json({ classified: done.length, remaining: 0, emails: done })
       }
       if (method === 'DELETE' && path === '/api/emails/trash') {
         const before = db.length
@@ -314,6 +314,8 @@ describe('App: alerts for new urgent emails', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Classify' }))
 
     expect(await screen.findByText('1 new critical')).toBeInTheDocument()
+    // Keyword rules only (#92): no "by AI / by rules" split any more
+    expect(screen.getByText('Classified 2 emails by keywords.')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Show critical' }))
     await waitFor(() => expect(window.location.search).toBe('?view=critical'))
   })
@@ -325,7 +327,7 @@ describe('App: alerts for new urgent emails', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Classify' }))
 
-    await screen.findByText(/Classified 1 emails/)
+    await screen.findByText('Classified 1 email by keywords.')
     expect(screen.queryByText(/new critical|new high/)).not.toBeInTheDocument()
   })
 

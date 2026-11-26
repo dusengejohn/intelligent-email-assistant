@@ -51,7 +51,7 @@ describe('ReadingPane', () => {
 
     await userEvent.selectOptions(screen.getByLabelText('Change priority'), 'high')
     await userEvent.click(screen.getByRole('button', { name: 'Mark handled' }))
-    await userEvent.click(screen.getByRole('button', { name: /Re-classify/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Classify by keywords' }))
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
     await userEvent.click(screen.getByRole('button', { name: /Back to list/ }))
 

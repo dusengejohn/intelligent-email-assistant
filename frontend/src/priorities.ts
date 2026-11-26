@@ -17,6 +17,6 @@ export const PRIORITY_ORDER: Priority[] = ['critical', 'high', 'moderate', 'low'
 /** How each source is shown on the card. */
 export const SOURCE_LABEL: Record<ClassificationSource, string> = {
   ai: 'AI',
-  fallback: 'rules',
+  rules: 'rules',
   manual: 'manual',
 }

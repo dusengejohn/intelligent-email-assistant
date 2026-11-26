@@ -13,11 +13,11 @@ from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect, text
-from sqlmodel import Session, SQLModel
+from sqlmodel import Session, SQLModel, select
 
 from app.db import BASELINE_REVISION, alembic_config, get_engine, migrate_database
 from app.main import app
-from app.models import Email
+from app.models import ClassificationSource, Email
 
 VERSIONS = Path(__file__).resolve().parents[1] / "migrations" / "versions"
 
@@ -165,3 +165,52 @@ def test_0002_adds_deleted_at_and_can_be_undone() -> None:
     columns = {c["name"] for c in inspect(get_engine()).get_columns("email")}
     assert "deleted_at" not in columns
     assert all_rows() == before  # undo keeps the data too
+
+
+def _insert(connection: object, subject: str, source: str | None) -> None:
+    value = "NULL" if source is None else f"'{source}'"
+    connection.execute(  # type: ignore[attr-defined]
+        text(
+            "INSERT INTO email (sender_name, sender_email, subject, body, received_at,"
+            f" status, created_at, classification_source) VALUES ('Ada', 'ada@example.com',"
+            f" '{subject}', 'Body', '2026-11-26 09:00:00', 'NEW', '2026-11-26 09:00:00', {value})"
+        )
+    )
+
+
+def _sources() -> dict[str, str | None]:
+    with get_engine().connect() as connection:
+        rows = connection.execute(text("SELECT subject, classification_source FROM email"))
+        return {subject: source for subject, source in rows}
+
+
+def test_0003_renames_fallback_to_rules_and_can_be_undone() -> None:
+    # A database at 0002 like data/app.db before #92: Claude, rules ("FALLBACK"),
+    # manual and unclassified emails. A DATA migration: only stored values change.
+    config = alembic_config(str(get_engine().url))
+    command.upgrade(config, "0002")
+    with get_engine().begin() as connection:
+        _insert(connection, "by Claude", "AI")
+        _insert(connection, "by the rules", "FALLBACK")
+        _insert(connection, "by a person", "MANUAL")
+        _insert(connection, "not yet", None)
+    before = all_rows()
+
+    command.upgrade(config, "0003")
+
+    assert _sources() == {
+        "by Claude": "AI",
+        "by the rules": "RULES",
+        "by a person": "MANUAL",
+        "not yet": None,
+    }
+    # Everything else in every row is unchanged (column 8 = classification_source)
+    assert [row[:8] + row[9:] for row in all_rows()] == [row[:8] + row[9:] for row in before]
+    # ...and the app reads the new value as ClassificationSource.RULES
+    with Session(get_engine()) as session:
+        email = session.exec(select(Email).where(Email.subject == "by the rules")).one()
+        assert email.classification_source == ClassificationSource.RULES
+
+    command.downgrade(config, "0002")
+
+    assert all_rows() == before  # exactly back: RULES -> FALLBACK

@@ -23,21 +23,16 @@ from app.schemas import (
     IngestRequest,
     IngestResult,
     SortOrder,
-    SourceCounts,
 )
-from app.services.ai_client import AIClient, get_optional_ai_client
-from app.services.classifier import classify_emails
+from app.services.rules import classify_by_rules
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/emails", tags=["emails"])
 
 SessionDep = Annotated[Session, Depends(get_session)]
-# Classification has a fallback, so a missing key means "use the rules", not 503
-OptionalAIDep = Annotated[AIClient | None, Depends(get_optional_ai_client)]
 
-# At most this many emails per classify request (3 AI batches, ~20 s): keeps
-# every request far below nginx's 180 s timeout. The client calls again while
-# `remaining` > 0.
+# At most this many emails per classify request: keeps each transaction small
+# (the rules take milliseconds). The client calls again while `remaining` > 0.
 CLASSIFY_LIMIT = 50
 
 
@@ -227,33 +222,27 @@ def _unclassified_count(session: Session) -> int:
     response_model=ClassifyResult,
     summary="Classify unclassified emails (newest first, up to 50 per request)",
 )
-def classify_unclassified(session: SessionDep, ai: OptionalAIDep) -> ClassifyResult:
-    # Only emails without a priority: AI, fallback and manual results are never
-    # overwritten. Two simultaneous calls could classify the same emails twice;
-    # harmless (last save wins) for a single-user app.
+def classify_unclassified(session: SessionDep) -> ClassifyResult:
+    # Keyword rules only (#92). Only emails without a priority: earlier results
+    # (rules, Claude before #92, manual) are never overwritten. Two simultaneous
+    # calls could classify the same emails twice; harmless (same rules, same answer).
     query = (
         select(Email)
-        .where(col(Email.priority).is_(None), _active())  # never send trashed emails to Claude
+        .where(col(Email.priority).is_(None), _active())  # trashed emails stay as they are
         .order_by(*_newest_order())
         .limit(CLASSIFY_LIMIT)
     )
     emails = list(session.exec(query))
-    results = classify_emails(emails, ai) if emails else {}
-
     for email in emails:
-        _apply(email, results[email.id])  # type: ignore[index]
+        _apply(email, classify_by_rules(email))
     session.add_all(emails)
     session.commit()  # one transaction for the whole request
     for email in emails:
         session.refresh(email)
 
-    sources = [c.source for c in results.values()]
+    logger.info("Classified %d emails by keyword rules", len(emails))
     return ClassifyResult(
         classified=len(emails),
-        by_source=SourceCounts(
-            ai=sources.count(ClassificationSource.AI),
-            fallback=sources.count(ClassificationSource.FALLBACK),
-        ),
         remaining=_unclassified_count(session),
         emails=[EmailRead.model_validate(email) for email in emails],
     )
@@ -265,11 +254,11 @@ def classify_unclassified(session: SessionDep, ai: OptionalAIDep) -> ClassifyRes
     summary="Classify (or re-classify) one email",
     responses={404: {"description": "Email not found"}},
 )
-def classify_one(email_id: int, session: SessionDep, ai: OptionalAIDep) -> Email:
-    # Explicit request for one email: re-classify even if it already has a
-    # priority (including a manual one). Not for trashed emails.
+def classify_one(email_id: int, session: SessionDep) -> Email:
+    # Explicit request for one email ("Classify by keywords"): classify it even
+    # if it already has a priority (Claude's or a manual one). Not for trashed emails.
     email = _get_or_404(session, email_id)
-    _apply(email, classify_emails([email], ai)[email_id])
+    _apply(email, classify_by_rules(email))
     session.add(email)
     session.commit()
     session.refresh(email)

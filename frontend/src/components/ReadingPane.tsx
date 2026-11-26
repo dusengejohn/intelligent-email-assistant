@@ -54,7 +54,7 @@ export function ReadingPane({
               {handled ? 'Mark as new' : 'Mark handled'}
             </button>
             <button type="button" onClick={onReclassify} disabled={busy} className={BUTTON}>
-              Re-classify
+              Classify by keywords
             </button>
             <button
               type="button"

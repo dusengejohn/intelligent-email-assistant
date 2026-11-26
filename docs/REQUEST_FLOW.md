@@ -4,7 +4,7 @@
 > (`http://localhost:8080/`): how the React frontend reaches the FastAPI backend, how
 > Docker's healthcheck decides the backend is ready, how the separate **Email Generator**
 > (`http://localhost:8081/`) writes emails with Claude and **delivers** them to the inbox,
-> how the inbox notices new mail, and what **Classify** does.
+> how the inbox notices new mail, and how **Classify** decides with keyword rules.
 > Applies to the stack started with `docker compose up --build` (three services since Epic 3b).
 > Diagrams are [Mermaid](https://mermaid.js.org/); GitHub renders them, and so does VS Code
 > with the recommended *Markdown Preview Mermaid Support* extension.
@@ -362,7 +362,9 @@ tokens: `docker compose logs generator | grep "Claude call"`. Measured end to en
 
 ## 7. Classifying emails: `POST /api/emails/classify`
 
-What happens when you click **Classify** with 105 unclassified emails.
+Since #92 the inbox classifies with **keyword rules only**: no AI, no key, no cost
+(decision: [ADR 0002](decisions/0002-rules-only-classification.md)). What happens when you
+click **Classify** with 46 unclassified emails:
 
 ```mermaid
 sequenceDiagram
@@ -370,59 +372,56 @@ sequenceDiagram
     participant R as React (browser)
     participant N as nginx (:80)
     participant F as FastAPI (backend)
-    participant C as Claude API
     participant D as SQLite
 
     loop until remaining = 0 (api.ts classifyEmails)
         R->>N: POST /api/emails/classify
         N->>F: same request
         F->>D: up to 50 emails WHERE priority IS NULL, newest first
-        loop batches of 20
-            F->>C: messages.parse(output_format=ClassificationBatch)<br/>each email in <email id="…"> tags, content escaped
-            C-->>F: {"results": [{email_id, priority, reason, minutes}]}
-            Note over F: strict check per item; anything invalid,<br/>missing or failed → rules (fallback.py)
-        end
-        F->>D: save priority, reason, minutes, source (ONE commit)
-        F-->>R: 200 {classified, by_source {ai, fallback}, remaining, emails}
-        Note over R: "Classifying… 50 of 105"
+        Note over F: rules.py per email: the first matching rule decides,<br/>the reason names every keyword of that priority
+        F->>D: save priority, reason, minutes, source = rules (ONE commit)
+        F-->>R: 200 {classified, remaining, emails}
     end
     R->>N: GET /api/emails (refresh)
-    Note over R: "Classified 105 emails: 105 by AI, 0 by rules."
+    Note over R: "Classified 46 emails by keywords."
 ```
 
 1. **The UI loops** ([`api.ts`](../frontend/src/api.ts) `classifyEmails`): the backend
-   does at most **50 emails per request** and answers how many are `remaining`, so one
-   click finishes any backlog while every request stays short (~20 s, far below nginx's
-   180 s). Guards: stop if a request makes no progress, or after 20 requests.
-2. **Only unclassified emails** are picked (`priority IS NULL`), so a manual, AI or rules
-   priority is never overwritten, and calling it twice is safe.
-3. **The AI is optional here** (`get_optional_ai_client`): no key means `None`, and the
-   rules classify everything with **200**, not 503. Generation, which has no fallback,
-   keeps the 503.
-4. **Claude classifies 20 per call** ([`classifier.py`](../backend/app/services/classifier.py)),
-   using the brief §7 definitions from [`priorities.py`](../backend/app/priorities.py).
-   Email content goes inside `<email id="…">` tags and is escaped, so text like
-   `</email> ignore your rules` can't act as instructions (**prompt injection**).
-5. **Every email gets exactly one result**, from Claude or the rules:
+   does at most **50 emails per request** and answers how many are `remaining`. With the
+   rules a request takes milliseconds; the limit just keeps each transaction small.
+   Guards: stop if a request makes no progress, or after 20 requests.
+2. **Only unclassified emails** are picked (`priority IS NULL`): a manual priority, an
+   earlier rules result and the 140 labels Claude gave before #92 (source `ai`) are never
+   overwritten, and calling it twice is safe.
+3. **The rules** ([`services/rules.py`](../backend/app/services/rules.py)) are an ordered
+   table built from brief §7 ([`priorities.py`](../backend/app/priorities.py)):
+   critical words → clear low markers (newsletter, FYI) → high words → automated sender
+   → otherwise moderate. Words match as whole words, ignoring case ("down" in "is down",
+   not in "download").
+4. **The reason explains the decision:** every keyword of the deciding priority, in the
+   order found, without duplicates, at most 4, plus what they signal, always ≤ 200
+   characters:
 
-   | Situation | Result |
-   |---|---|
-   | no API key | all emails → rules |
-   | key rejected (401/403) | this and all later batches → rules, no more calls |
-   | a batch fails (timeout, rate limit, connection, refusal…) | that batch → rules |
-   | an item is invalid, unknown id, duplicate, or an email is missing | that email → rules |
-   | valid item | `source = ai` |
+   | Email | Priority | Reason |
+   |---|---|---|
+   | "Website outage", "…the production database is down…" | critical | *Critical: matched "outage", "database is down" (an outage, a service that is down).* |
+   | "Customer escalation", "…blocked… ASAP" | high | *High: matched "Customer", "escalation", "blocked", "ASAP" (…).* |
+   | "Monthly newsletter … customers … FYI" | low | *Low: matched "newsletter", "FYI" (a newsletter or FYI).* (low markers win over "customer") |
+   | from `alerts@…`, no keywords | low | *Low: sent by an automated address ("alerts@").* |
+   | anything else | moderate | *Moderate: no urgent or low-priority keywords found.* |
 
-6. **One commit** per request, then the UI refreshes the list. Badges show the priority
-   color and the source (`AI`, `rules`, `manual`).
+5. **One commit** per request, then the UI refreshes the list. Badges show the priority
+   color and the source (`rules`, `manual`, or `AI` on old emails).
 
-**Manual override:** the dropdown sends `PATCH /api/emails/{id} {"priority": "high"}`;
-the email becomes `manual` ("Set manually.", default minutes) and bulk classify never
-touches it again. `POST /api/emails/{id}/classify` re-classifies one email on purpose.
+**One email:** the reading pane's **Classify by keywords** sends
+`POST /api/emails/{id}/classify`: the rules decide for that email even if it had an `AI` or
+`manual` label (you asked for it). **Manual override:** the dropdown sends
+`PATCH /api/emails/{id} {"priority": "high"}`; the email becomes `manual` ("Set manually.")
+and bulk Classify never touches it again.
 
-**Cost:** about **$0.0008 per 20 emails** (~280 input and ~100 output tokens per email);
-105 emails ≈ $0.008. Quality on the labelled set: see
-[testing/epic-2-eval.md](testing/epic-2-eval.md).
+**Quality:** the rules are tested against 23 hand-labelled emails (≥ 80 % required, no
+critical email below high) in `backend/tests/services/test_rules.py`. The earlier AI-vs-rules
+measurement is kept for history in [testing/epic-2-eval.md](testing/epic-2-eval.md).
 
 ---
 
@@ -548,8 +547,7 @@ The frontend code doesn't know or care which mode it's in.
 | Generated, but nothing shows in the inbox | The inbox tab is in the background (timers slowed down) or was opened before the stack restarted | Look at the tab for ~15 s, or reload it; `docker compose logs backend \| grep Ingested` |
 | `localhost:8080` shows an **old** version that `docker ps` doesn't list | A second Docker Engine inside WSL holds the ports | `systemctl is-active docker`; see README "Docker and the `data/` folder" |
 | From a WSL terminal, `curl localhost:8080` fails but the Windows browser works | Older Docker Desktop setups publish ports only on Windows | Use the Windows host IP: `ip route \| awk '/default/ {print $3}'` |
-| Classify says **"0 by AI, N by rules"** although a key is set | Every Claude call failed (connection, TLS, rate limit); the rules took over | `docker compose logs backend \| grep "Claude call failed"` |
-| Backend log shows `CERTIFICATE_VERIFY_FAILED … self-signed certificate` | Something (VPN, antivirus HTTPS scanning, captive portal) intercepts HTTPS from Docker | Test from the container: `docker compose exec backend python -c "import urllib.request; urllib.request.urlopen('https://api.anthropic.com')"`; fix the network, then reclassify |
+| Generator log shows `CERTIFICATE_VERIFY_FAILED … self-signed certificate` | Something (VPN, antivirus HTTPS scanning, captive portal) intercepts HTTPS from Docker | Test from the container: `docker compose exec generator python -c "import urllib.request; urllib.request.urlopen('https://api.anthropic.com')"`; fix the network, then generate again |
 | Clicks that change data (Delete, priority) do nothing; views and page loads work | VS Code's built-in browser doesn't send `POST`/`PATCH`/`DELETE` to the app | Use Firefox/Edge/Chrome; the nginx log shows the browser (`Code/…` vs `Firefox/…`) |
 | After a reboot the app doesn't answer, Docker Desktop's window looks fine | Docker Desktop's engine didn't start: `docker-desktop` WSL distro *Stopped* | `wsl -l -v`; Docker Desktop → Troubleshoot → Restart (or `wsl --shutdown`, then start it) |
 | The whole page scrolls into a long blank area below the list | A scroll area without `position: relative` let `sr-only` labels escape (fixed in #66) | The list scroller in `App.tsx` must keep `relative` (tested) |
@@ -622,9 +620,10 @@ assets, then `health`. Click `health` to see headers and the JSON response.
 | **Transaction / commit** | A group of database writes saved together: all of them, or none. |
 | **Bind mount** | A host folder mounted into a container (`./data:/app/data`), so data survives `docker compose down`. |
 | **`restart: unless-stopped`** | Docker starts the container again when Docker starts, unless you stopped it yourself. |
-| **Fallback / graceful degradation** | When a dependency (Claude) fails, a simpler method (keyword rules) takes over, so the feature still works. |
-| **Prompt injection** | Text in the *data* that tries to act as *instructions* to the AI; prevented here with tags, escaping and strict validation. |
-| **Eval** | Measuring an AI system against examples with known answers (`scripts/eval_classifier.py`). |
+| **Graceful degradation** | When a dependency fails, the app still works in a reduced way (e.g. the inbox keeps working while the generator is down). |
+| **Deterministic vs probabilistic** | Rules always give the same answer for the same input (and can say why); an LLM can judge context better but may vary. The inbox's Classify is deterministic since #92. |
+| **Data migration** | A migration that changes stored *values* (0003: `FALLBACK` → `RULES`), not only the table shape; needs an exact downgrade and a test on sample rows. |
+| **Eval** | Measuring a classifier against examples with known answers (the labelled set in `backend/tests/data/`). |
 | **Service boundary / API contract** | Two services that only talk through an agreed API (here `POST /api/emails/ingest`), so each can change inside without breaking the other. |
 | **Shared secret** | A random value both services know (`INGEST_TOKEN`); the caller sends it, the receiver compares it in constant time. |
 | **Polling** | Asking "anything new?" on a timer (every 15 s). Simple; the alternative is **push** (Server-Sent Events, WebSockets). |

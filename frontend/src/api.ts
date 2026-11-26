@@ -4,7 +4,8 @@
 
 export type Priority = 'critical' | 'high' | 'moderate' | 'low'
 export type EmailStatus = 'new' | 'handled'
-export type ClassificationSource = 'ai' | 'fallback' | 'manual'
+/** 'ai' only on emails classified by Claude before #92; new results are 'rules'. */
+export type ClassificationSource = 'ai' | 'rules' | 'manual'
 
 /** Matches the backend's `EmailRead` schema. Timestamps are UTC ISO strings. */
 export interface Email {
@@ -71,8 +72,6 @@ export function getSummary(): Promise<EmailSummary> {
 /** Totals over all the classify requests of one click. */
 export interface ClassifyTotals {
   classified: number
-  ai: number
-  fallback: number
   /** New urgent emails among those just classified (for the alert, story 3.7) */
   critical: number
   high: number
@@ -80,7 +79,6 @@ export interface ClassifyTotals {
 
 interface ClassifyResult {
   classified: number
-  by_source: { ai: number; fallback: number }
   remaining: number
   emails: Email[]
 }
@@ -96,12 +94,10 @@ const MAX_CLASSIFY_REQUESTS = 20
 export async function classifyEmails(
   onProgress?: (classifiedSoFar: number) => void,
 ): Promise<ClassifyTotals> {
-  const totals: ClassifyTotals = { classified: 0, ai: 0, fallback: 0, critical: 0, high: 0 }
+  const totals: ClassifyTotals = { classified: 0, critical: 0, high: 0 }
   for (let i = 0; i < MAX_CLASSIFY_REQUESTS; i++) {
     const result = await request<ClassifyResult>('/api/emails/classify', { method: 'POST' })
     totals.classified += result.classified
-    totals.ai += result.by_source.ai
-    totals.fallback += result.by_source.fallback
     // Counted from the emails this request classified: exact, unlike comparing
     // /summary totals before/after (other changes could happen meanwhile)
     totals.critical += result.emails.filter((e) => e.priority === 'critical').length
@@ -142,7 +138,7 @@ export function emptyTrash(): Promise<{ deleted: number }> {
   return request<{ deleted: number }>('/api/emails/trash', { method: 'DELETE' })
 }
 
-/** Re-classify one email (Claude, or the rules without a key). */
+/** Classify one email by keywords ("Classify by keywords"), whatever it had before. */
 export function classifyOne(id: number): Promise<Email> {
   return request<Email>(`/api/emails/${id}/classify`, { method: 'POST' })
 }

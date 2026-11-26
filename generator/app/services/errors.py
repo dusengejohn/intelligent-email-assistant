@@ -1,4 +1,4 @@
-"""Errors raised by the AI layer (a copy of the inbox's, see ai_client.py).
+"""Errors raised by the AI layer (see ai_client.py).
 
 Their messages are short and safe to show to a user: no API key, no stack
 trace, no raw response body. Routers map them to HTTP status codes.

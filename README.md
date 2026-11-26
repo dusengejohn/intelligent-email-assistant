@@ -6,7 +6,7 @@ like a mail server and a mail client:
 | App | Address (Docker) | What it does |
 |---|---|---|
 | **Email Generator** | http://localhost:8081 | A search-engine-like page: writes realistic (fictional) workplace emails with Claude and **delivers** them to the inbox |
-| **Inbox** | http://localhost:8080 | Receives the emails ("10 new emails arrived"), classifies them by priority, views, reading pane, Trash, alerts |
+| **Inbox** | http://localhost:8080 | Receives the emails ("10 new emails arrived"), classifies them by priority with **keyword rules** (no AI), views, reading pane, Trash, alerts |
 
 They talk only through one API (`POST /api/emails/ingest` with a shared token); why:
 [ADR 0001](docs/decisions/0001-separate-generator-service.md). A dashboard and calendar
@@ -49,9 +49,10 @@ docker compose up --build                 # inbox :8080, inbox API :8000, genera
 
 ## Using Claude (API key and cost)
 
-Generating and classifying emails call the **Claude API**, which is **pay-as-you-go** and
-billed separately from any claude.ai subscription. Everything else (the list, manual
-priorities, tests, CI) works without a key, and classification falls back to keyword rules.
+Only **generating** emails (the Email Generator) calls the **Claude API**, which is
+**pay-as-you-go** and billed separately from any claude.ai subscription. The inbox never
+calls Claude: it classifies with keyword rules (free; why: [ADR 0002](docs/decisions/0002-rules-only-classification.md)).
+Everything except Generate works without a key.
 
 1. In the [Anthropic Console](https://console.anthropic.com): add a few dollars of credit
    (Billing) and **set a monthly spend limit** (Settings → Limits) first.
@@ -60,34 +61,28 @@ priorities, tests, CI) works without a key, and classification falls back to key
    ```
    ANTHROPIC_API_KEY=sk-ant-...
    ```
-4. Restart what's running: `docker compose up -d backend`, or restart uvicorn.
+4. Restart what's running: `docker compose up -d generator`, or restart the generator's uvicorn.
 
 | | Cost with `claude-haiku-5-5` |
 |---|---|
 | Generate 10 emails (1 Claude call, ~15 s) | about **$0.0015** |
 | Generate 50 emails (5 calls, ~60–80 s) | about **$0.007** |
-| Classify 20 emails (1 call, ~5–10 s) | about **$0.0008** |
-| Classify 105 emails (one click = 3 requests, ~26 s) | about **$0.008** |
+| Classify any number of emails (keyword rules, milliseconds) | **free** |
 
-- Every call logs its tokens: `docker compose logs backend | grep "Claude call"` (classify)
-  and `docker compose logs generator | grep "Claude call"` (generate).
-- No key → the app still works; **Generate** (on the generator page, :8081) shows *"AI is not
-  configured: set ANTHROPIC_API_KEY in .env"* (HTTP 503), and **Classify** uses the keyword
-  rules (HTTP 200).
-- **Tests and CI never call Claude** and need no key: the AI client is replaced by a fake
-  (`backend/tests/fakes.py`), and GitHub has no API key secret on purpose.
+- Every call logs its tokens: `docker compose logs generator | grep "Claude call"`.
+- No key → **Generate** (on the generator page, :8081) shows *"AI is not configured: set
+  ANTHROPIC_API_KEY in .env"* (HTTP 503); the inbox is unaffected.
+- **Tests and CI never call Claude** and need no key: the generator's AI client is replaced
+  by a fake (`generator/tests/fakes.py`), and GitHub has no API key secret on purpose.
 
-**Classify emails:** click **Classify**. One click classifies every unclassified email
-(the UI repeats the request, 50 emails at a time). Each card shows a colored priority
-badge, its source (`AI`, `rules` or `manual`) and a one-sentence reason. The result line
-says how many came from the AI and how many from the rules: **"by rules" while a key is
-set means Claude was unreachable** (see the troubleshooting table in
-[docs/REQUEST_FLOW.md](docs/REQUEST_FLOW.md)). Change a priority with the dropdown on a
-card: it becomes `manual` and is never overwritten by later classifications.
-
-**Measure classifier quality** (manual, never in CI, ~$0.001 per run with a key):
-`cd backend && uv run python -m scripts.eval_classifier --runs 3`. Results and caveats:
-[docs/testing/epic-2-eval.md](docs/testing/epic-2-eval.md).
+**Classify emails:** click **Classify**: every unclassified email is classified by
+**keyword rules** ("Classified 46 emails by keywords."). Each card shows a colored priority
+badge, its source (`rules`, `manual`, or `AI` on emails Claude classified before #92) and a
+reason that **names the matched keywords**, e.g. *Critical: matched "outage", "database is
+down" (an outage, a service that is down).* To classify one email (even one with an `AI` or
+`manual` label), open it and click **Classify by keywords**. Change a priority with the
+dropdown: it becomes `manual` and is never overwritten by **Classify**. How the rules decide:
+[docs/REQUEST_FLOW.md §7](docs/REQUEST_FLOW.md#7-classifying-emails-post-apiemailsclassify).
 
 **Generate emails:** since Epic 3b the inbox doesn't generate any more. Use the separate
 **Email Generator** at http://localhost:8081 (Docker; dev: see below): choose 1–50 and click
@@ -145,7 +140,7 @@ data (see `docs/testing/epic-3.md`).
   On a narrow window the views are a dropdown above the list.
 - **Reading pane:** the full email, its priority, source and reason, and the actions:
   change the priority (becomes `manual`, never overwritten by Classify), Mark handled /
-  Mark as new, Re-classify (one Claude call), Delete.
+  Mark as new, Classify by keywords, Delete.
 - **Trash:** Delete moves an email to the Trash at once, with an **Undo** toast. In the
   Trash view, open an email to **Restore** it; **Empty trash** deletes everything in it
   permanently and asks first.
@@ -244,10 +239,9 @@ The SQLite database lives in `data/app.db`, shared by local runs and Docker
 .github/                   CI (backend, generator, frontend, docker jobs), Dependabot, PR/issue templates
 backend/app/               FastAPI app: main.py, config, db, models, schemas
   routers/                 API endpoints (health, emails)
-  services/                Claude client, prompts, classifier, fallback rules
-backend/scripts/           Manual developer tools (classifier eval; never in CI)
+  services/                rules.py (the keyword classifier; no AI in the inbox)
 backend/migrations/        Alembic database migrations (applied at startup)
-backend/tests/             pytest (fakes.py = fake Claude client)
+backend/tests/             pytest (data/labelled_emails.py = hand-labelled set for the rules)
 generator/app/             Email generator service (Epic 3b): Claude client, generate, deliver to the inbox
 generator/tests/           its pytest suite (fakes: FakeAI, FakeInbox)
 generator/web/             its page (React; served by the generator in Docker)

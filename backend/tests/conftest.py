@@ -2,9 +2,8 @@
 
 Every test runs isolated from the developer's machine: no real `.env`, no
 app-related environment variables, a fresh settings cache, and a database file
-inside the test's temporary folder. This guarantees that a real
-ANTHROPIC_API_KEY can never be used by a test and that `data/app.db` is never
-touched.
+inside the test's temporary folder. This guarantees that a real INGEST_TOKEN can
+never be used by a test and that `data/app.db` is never touched.
 """
 
 from collections.abc import Iterator
@@ -24,9 +23,6 @@ from app.main import app
 APP_ENV_VARS = (
     "APP_ENV",
     "DATABASE_URL",
-    "ANTHROPIC_API_KEY",
-    "ANTHROPIC_MODEL",
-    "AI_TIMEOUT_SECONDS",
     "INGEST_TOKEN",
 )
 
