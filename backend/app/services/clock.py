@@ -39,3 +39,8 @@ def work_window(day: date, settings: Settings) -> tuple[datetime, datetime]:
     start = datetime.combine(day, settings.work_start, tzinfo=zone)
     end = datetime.combine(day, settings.work_end, tzinfo=zone)
     return start.astimezone(UTC), end.astimezone(UTC)
+
+
+def get_now() -> datetime:
+    """FastAPI dependency for "now", so tests can override it with a fixed moment."""
+    return utc_now()

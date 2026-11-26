@@ -128,8 +128,10 @@ and GitHub/hosting secrets.
 | status | enum `new/handled` | default `new` |
 | created_at | datetime | |
 
-**CalendarEvent** (read-only input): `id, title, start, end` (tz-aware). Mock source:
-`backend/app/data/calendar_mock.json` first.
+**CalendarEvent** (read-only input, not stored): `id, title, start, end`, start/end as UTC
+instants (`"…Z"`). Source: the `CalendarSource` interface (one method, `events(day)`, no write
+method); today `MockCalendar`, which builds any date from a weekly template in local time,
+`backend/app/data/calendar_mock.json` (#96). Ids are `<date>-<n>` (stable per day).
 
 ## 7. Priority definitions (shared by AI prompt, fallback rules and UI)
 
@@ -352,6 +354,9 @@ unclassified emails first within each group.
 - ✅ Planning settings `APP_TIMEZONE` + `WORK_HOURS` validated at startup (fail fast); time
   helpers in `services/clock.py` (UTC arithmetic, local only for "which day" and display;
   DST days tested); `tzdata` for time zones on any OS (#95)
+- ✅ Calendar: `CalendarSource` Protocol (read-only), `MockCalendar` from a validated weekly
+  template (stand-up, lunch, meetings; an early call, an overlap, an event past 17:00; free
+  weekend); `GET /api/calendar/events?date=` in UTC, default today (#96)
 
 **Classify with keyword rules only: done** (#92, [ADR 0002](decisions/0002-rules-only-classification.md))
 - ✅ The inbox's only classifier is the keyword rules (`services/rules.py`); the reason names
