@@ -42,10 +42,12 @@ Guidance for Claude Code when working in this repository.
   Alerts for new critical/high emails follow Classify and are counted from the classify
   response (`src/alerts.ts`); desktop notifications go only through `src/notifications.ts`
   (opt-in by click, shown only when the tab is hidden; the toast always appears).
+  `HealthPill` re-checks `/api/health` every 15 s (new-mail polling stays quiet on errors).
   `src/priorities.ts` mirrors `app/priorities.py` (labels, colors); the backend test
   `tests/test_frontend_priorities_sync.py` fails if they drift apart.
 - `data/` — SQLite database file (git-ignored).
-- `docs/` — project documentation; manual end-to-end checklists in `docs/testing/`.
+- `docs/` — project documentation; manual end-to-end checklists in `docs/testing/`; decision
+  records (ADRs) in `docs/decisions/` (numbered, never rewritten; a new decision supersedes).
 
 ## Commands (run from `backend/`)
 - Install / sync deps: `uv sync`

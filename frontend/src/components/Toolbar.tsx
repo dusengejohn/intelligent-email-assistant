@@ -26,9 +26,17 @@ export function Toolbar({ classifying, loadingList, onClassify }: Props) {
       </button>
       <p className="text-sm text-gray-500">
         New emails come from the{' '}
-        <a href={GENERATOR_URL} className="text-blue-600 underline hover:text-blue-800">
+        {/* A new tab: the inbox stays open. noopener: the generator page gets no
+            handle back to this one (window.opener) */}
+        <a
+          href={GENERATOR_URL}
+          target="_blank"
+          rel="noopener"
+          className="text-blue-600 underline hover:text-blue-800"
+        >
           Email Generator
         </a>
+        <span aria-hidden="true" className="text-blue-600"> ↗</span>
       </p>
       <div className="ml-auto flex items-center gap-3">
         <DesktopAlertsButton />
