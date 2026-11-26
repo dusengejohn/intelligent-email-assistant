@@ -33,6 +33,26 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pytest
 
+  # The separate generator service (Epic 3b): its own project, lockfile and tests
+  generator:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: generator
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: generator/uv.lock
+
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

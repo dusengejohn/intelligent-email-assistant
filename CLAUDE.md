@@ -17,6 +17,13 @@ Guidance for Claude Code when working in this repository.
     e.g. `eval_classifier.py` (AI vs rules accuracy; calls the real API);
   - `tests/` mirrors `app/`; `tests/fakes.py` holds the shared `FakeAI`;
     `tests/data/labelled_emails.py` is the hand-labelled set for classifier tests.
+- `generator/` — the **Email Generator** service (Epic 3b), a separate uv project with its own
+  `pyproject.toml`/`uv.lock`: `app/routers/generate.py` (`POST /api/generate`),
+  `app/services/` — `ai_client.py` + `errors.py` (**copies** of the inbox's; fix bugs in both),
+  `generator.py`, `prompts.py`, `inbox.py` (`InboxClient`: delivers to the inbox's
+  `/api/emails/ingest` with `X-Ingest-Token`; the only caller of the inbox). No database.
+  Emails may be at most 47 h old (inbox: 48 h) so they're still valid on delivery.
+  Tests: `tests/fakes.py` has `FakeAI` and `FakeInbox` (`httpx.MockTransport`), no network.
 - `frontend/` — React + Vite + TypeScript + Tailwind, served by nginx in Docker; `/api/` is
   proxied to the backend (by Vite in dev, by nginx in Docker). `src/api.ts` is the typed
   API client (Vitest: `src/api.test.ts`); UI pieces live in `src/components/`. Component tests
@@ -43,6 +50,11 @@ Guidance for Claude Code when working in this repository.
 - Lint: `uv run ruff check .` (auto-fix: `--fix`)
 - Format: `uv run ruff format .`
 - Full stack (from repo root): `docker compose up --build`
+
+## Commands (run from `generator/`)
+- Same as `backend/`: `uv sync`, `uv run pytest`, `uv run ruff check .`, `uv run ruff format .`
+- Dev server: `uv run uvicorn app.main:app --reload --port 8001` (delivers to `INBOX_URL`,
+  default `http://localhost:8000`; needs `INGEST_TOKEN` and `ANTHROPIC_API_KEY`)
 
 ## Commands (run from `frontend/`)
 - Install deps: `npm install` (CI uses `npm ci`)

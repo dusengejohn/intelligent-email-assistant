@@ -1,0 +1,33 @@
+[project]
+name = "email-generator"
+version = "0.1.0"
+description = "Separate service that generates sample emails with Claude and delivers them to the inbox"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=2.14.0",
+    "fastapi>=0.165.0",
+    "httpx>=0.28.1",
+    "pydantic-settings>=2.16.3",
+    "pydantic[email]>=2.14.4",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.6",
+]

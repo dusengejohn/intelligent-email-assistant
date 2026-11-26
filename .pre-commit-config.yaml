@@ -46,6 +46,35 @@ repos:
         files: ^backend/
         pass_filenames: false
 
+      # The generator service (Epic 3b): same checks, its own project and lockfile
+      - id: generator-ruff-lint
+        name: ruff lint (generator)
+        entry: uv run --directory generator ruff check --fix .
+        language: system
+        files: ^generator/.*\.py$
+        pass_filenames: false
+
+      - id: generator-ruff-format
+        name: ruff format (generator)
+        entry: uv run --directory generator ruff format .
+        language: system
+        files: ^generator/.*\.py$
+        pass_filenames: false
+
+      - id: generator-uv-lock
+        name: uv.lock in sync (generator)
+        entry: uv lock --check --directory generator
+        language: system
+        files: ^generator/(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+
+      - id: generator-pytest
+        name: pytest (generator)
+        entry: uv run --directory generator pytest -q
+        language: system
+        files: ^generator/
+        pass_filenames: false
+
       - id: eslint
         name: eslint (frontend)
         entry: npm --prefix frontend run lint
