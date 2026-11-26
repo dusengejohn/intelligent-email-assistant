@@ -7,13 +7,14 @@ Guidance for Claude Code when working in this repository.
   - `app/main.py` (app, routers under `/api`, error handlers, logging), `config.py`,
     `db.py`, `models.py` (tables), `schemas.py` (API + AI shapes), `priorities.py`
     (brief §7 as code: the single source for priority meanings, colors, default minutes);
-  - `app/routers/` — endpoints (`health.py`, `emails.py`, `calendar.py`);
+  - `app/routers/` — endpoints (`health.py`, `emails.py`, `calendar.py`, `planning.py`);
   - `app/services/` — `clock.py` (time helpers for planning: `utc_now`, `local_today`,
     `work_window`, `get_now` dependency), `calendar.py` (`CalendarSource` Protocol: one
     read-only method `events(day)`; `MockCalendar` from the weekly template
     `app/data/calendar_mock.json`, validated on load; `get_calendar` dependency),
-    `planner.py` (pure planning functions: `planning_window`, `free_slots` → `Slot`; no
-    database, no clock: pass `now` and the events in), `rules.py` (`classify_by_rules`: the keyword classifier, the inbox's
+    `planner.py` (pure planning functions: `planning_window`, `free_slots` → `Slot`,
+    `allocate` → `Block`s + not_today; no database, no clock: pass `now` and the data in;
+    `routers/planning.py` only reads and calls them — **advice only, never writes**), `rules.py` (`classify_by_rules`: the keyword classifier, the inbox's
     only one; the reason names the matched keywords). **No AI in the inbox** (#92, ADR 0002);
   - `migrations/` + `alembic.ini` — Alembic database migrations, applied at startup by
     `app/db.py` `migrate_database()` (existing pre-Alembic databases are stamped at `0001`);

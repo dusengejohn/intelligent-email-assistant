@@ -136,6 +136,21 @@ curl localhost:8080/api/calendar/events               # today
 curl "localhost:8080/api/calendar/events?date=2026-11-28"   # a Saturday: []
 ```
 
+## Plan your day (Epic 4, advice only)
+
+`GET /api/planning/suggestions?date=YYYY-MM-DD` (default: today) suggests **when to answer which
+email**, using the free time between your meetings within `WORK_HOURS` (today: from now on).
+Open emails (not handled, not in the Trash) are placed in priority order, oldest first within a
+priority; each gets the earliest free time it fits into (an urgent email that is too long for
+an early gap leaves that gap to a shorter, less urgent one). Low emails are **batched** into one
+block at the end of the day. What doesn't fit is listed in `not_today`; unclassified emails are
+only counted ("classify first"). Nothing is booked or changed. A Plan view follows in story 4.5.
+
+```bash
+curl localhost:8080/api/planning/suggestions                  # today
+curl "localhost:8080/api/planning/suggestions?date=2026-11-27"   # a future day
+```
+
 ## Using the inbox
 
 Open http://localhost:8080 (Docker) or http://localhost:5173 (dev). Use a normal browser
