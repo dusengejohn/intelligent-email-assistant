@@ -148,6 +148,10 @@ describe('App: list and views', () => {
       'href',
       'http://localhost:8081',
     )
+    // A new tab, so the inbox stays open (story 3b.6 review)
+    const generatorLink = screen.getByRole('link', { name: 'Email Generator' })
+    expect(generatorLink).toHaveAttribute('target', '_blank')
+    expect(generatorLink).toHaveAttribute('rel', expect.stringContaining('noopener'))
     const views = screen.getByRole('navigation', { name: 'Views' })
     expect(await within(views).findByRole('button', { name: /All/ })).toHaveTextContent('2')
     expect(within(views).getByRole('button', { name: /Unclassified/ })).toHaveTextContent('1')

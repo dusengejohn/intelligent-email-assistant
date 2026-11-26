@@ -1,8 +1,16 @@
 # intelligent-email-assistant
 
-A small full-stack app for learning AI + modern SDLC: it generates realistic (fictional)
-workplace emails with Claude and classifies them by priority (Claude, with keyword rules
-as a fallback). A dashboard and calendar planning follow in later epics ([project brief](docs/PROJECT_BRIEF.md)).
+A small full-stack app for learning AI + modern SDLC. It is **two apps** that work together
+like a mail server and a mail client:
+
+| App | Address (Docker) | What it does |
+|---|---|---|
+| **Email Generator** | http://localhost:8081 | A search-engine-like page: writes realistic (fictional) workplace emails with Claude and **delivers** them to the inbox |
+| **Inbox** | http://localhost:8080 | Receives the emails ("10 new emails arrived"), classifies them by priority, views, reading pane, Trash, alerts |
+
+They talk only through one API (`POST /api/emails/ingest` with a shared token); why:
+[ADR 0001](docs/decisions/0001-separate-generator-service.md). A dashboard and calendar
+planning follow in later epics ([project brief](docs/PROJECT_BRIEF.md)).
 
 ## Prerequisites
 Developed in WSL (Ubuntu) + VS Code. Install these **inside WSL**, not on Windows:
@@ -18,6 +26,8 @@ in VS Code and accept "Install recommended extensions".
 
 ```bash
 cp .env.example .env
+# In .env: set ANTHROPIC_API_KEY (to generate) and INGEST_TOKEN (one random value, read by
+# both apps): python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 
 # Backend
 cd backend
@@ -34,7 +44,7 @@ npm run dev                               # http://localhost:5173 (proxies /api 
 npm test                                  # frontend unit + component tests (Vitest, React Testing Library)
 
 # Or the full stack (from repo root)
-docker compose up --build                 # frontend :8080, backend :8000
+docker compose up --build                 # inbox :8080, inbox API :8000, generator :8081
 ```
 
 ## Using Claude (API key and cost)

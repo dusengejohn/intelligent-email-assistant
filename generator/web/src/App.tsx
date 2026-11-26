@@ -96,11 +96,15 @@ export default function App() {
             <p className="text-lg font-medium text-green-700">
               {resultText(outcome.requested, outcome.delivered)}
             </p>
+            {/* A new tab: the generator stays open for the next run. noopener: the
+                inbox page gets no handle back to this one (window.opener) */}
             <a
               href={INBOX_URL}
+              target="_blank"
+              rel="noopener"
               className="mt-2 inline-block text-blue-600 underline hover:text-blue-800"
             >
-              Open the inbox
+              Open the inbox ↗
             </a>
           </div>
         )}

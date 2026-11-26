@@ -34,23 +34,29 @@
 
 ## 3. Architecture
 
+Two apps, three containers (since Epic 3b, decision: [ADR 0001](decisions/0001-separate-generator-service.md)):
+
 ```
-Browser (React SPA)
-   │  fetch("/api/...")
-   ▼
-nginx (frontend container :80, host :8080)  ── serves static build, proxies /api/* ──┐
-                                                                                    ▼
-                                                     FastAPI backend (container :8000)
-                                                       ├── SQLite  (./data/app.db, volume)
-                                                       ├── Anthropic Claude API (generate, classify, advise)
-                                                       ├── Calendar source (mock JSON/.ics → Google/Outlook later)
-                                                       ├── Open-Meteo (weather, no key)
-                                                       └── RSS feeds (news)
+Browser :8081 (Email Generator page)              Browser :8080 (Inbox, React SPA)
+   │  fetch("/api/generate")                          │  fetch("/api/...")  (+ /summary every 15 s)
+   ▼                                                  ▼
+generator container (FastAPI, host :8081)        nginx (frontend container :80, host :8080)
+  ├── serves its own built page at /               ── serves static build, proxies /api/* ──┐
+  ├── Anthropic Claude API (generate)                                                       ▼
+  └── delivers: POST http://backend:8000/api/emails/ingest ──────► FastAPI backend (container :8000)
+                (X-Ingest-Token, Docker network)                    ├── SQLite  (./data/app.db, volume)
+                                                                    ├── Anthropic Claude API (classify; rules-only planned in #92)
+                                                                    ├── Calendar source (mock JSON/.ics → Google/Outlook later)
+                                                                    ├── Open-Meteo (weather, no key)
+                                                                    └── RSS feeds (news)
 ```
 
 - **Dev mode:** `uv run uvicorn app.main:app --reload` (:8000) + `npm run dev` (:5173,
-  Vite proxies `/api` → :8000).
-- **Docker mode:** `docker compose up --build` → frontend :8080, backend :8000.
+  Vite proxies `/api` → :8000); generator: uvicorn on :8001 + `npm run dev` in
+  `generator/web` (:5174).
+- **Docker mode:** `docker compose up --build` → inbox :8080, inbox API :8000, generator :8081.
+- **Between the services:** only `POST /api/emails/ingest` with the shared `INGEST_TOKEN`; no
+  shared database, no shared code (the generator has its own small Claude client copy).
 - **Rule:** every backend route lives under the **`/api`** prefix (FastAPI `APIRouter(prefix="/api")`);
   nginx passes the path through unchanged (`proxy_pass http://backend:8000;` — no trailing slash).
 
@@ -78,8 +84,13 @@ backend/app/
   models.py          # SQLModel tables
   schemas.py         # request/response models
   routers/           # emails.py, calendar.py, planning.py, widgets.py, health.py
-  services/          # ai_client.py, generator.py, classifier.py, fallback.py, planner.py, weather.py, news.py
+  services/          # ai_client.py, classifier.py, fallback.py, planner.py, weather.py, news.py
 backend/tests/       # mirrors services/ and routers/
+generator/           # the Email Generator (Epic 3b): own uv project, no database
+  app/               # main.py (page + API), config.py, schemas.py, routers/generate.py,
+                     # services/ (ai_client.py copy, generator.py, prompts.py, inbox.py)
+  web/               # its page (React + Vite + TS + Tailwind), built into the image
+  tests/             # pytest with FakeAI + FakeInbox
 ```
 
 ## 5. Configuration (environment variables)
@@ -170,7 +181,7 @@ unclassified emails first within each group.
   list, sticky column header), views with counts incl. Trash, reading pane, soft delete with
   Undo / Restore / Empty trash, database migrations (Alembic).
 
-### Epic 3b — Separate email generator service (#79)
+### Epic 3b — Separate email generator service (#79) (done)
 - Coach's advice (2026-11-26): keep generating mail apart from reading it, like a mail
   server and a mail client. Option B: a separate **generator** service delivers emails to
   the inbox through an API (not a shared database).
@@ -180,6 +191,7 @@ unclassified emails first within each group.
   simple "search engine" page; generates, then delivers to the inbox (#81–#83).
 - Inbox: Generate removed; new mail detected by polling `/summary` every 15 s with a
   "N new emails arrived" toast (#84). End to end + docs + decision record (#85).
+- Decision record: [`docs/decisions/0001-separate-generator-service.md`](decisions/0001-separate-generator-service.md).
 
 ### Epic 4 — Calendar-based response planning (advice only)
 - `GET /api/calendar/events?date=YYYY-MM-DD` (mock source first; Google Calendar / Microsoft Graph later).
@@ -308,7 +320,8 @@ unclassified emails first within each group.
   Docker Desktop's engine can stay stopped after a reboot (restart it); a dashboard page with
   counts, brief and widgets is noted for Epic 5 (#6)
 
-**Epic 3b — Separate email generator service: in progress** (#79, stories #80–#85)
+**Epic 3b — Separate email generator service: done** (#79, stories #80–#85, test log:
+`docs/testing/epic-3b.md`, decision: `docs/decisions/0001-separate-generator-service.md`)
 - ✅ Inbox ingest API with a shared token (#80)
 - ✅ Generator service backend: `generator/` project, own Claude client copy, delivers to the
   inbox; 47 h age limit (1 h margin under the inbox's 48 h); CI job + pre-commit hooks (#81)
@@ -319,6 +332,15 @@ unclassified emails first within each group.
   on `main`; Dependabot for `generator/` (#83)
 - ✅ Inbox: Generate removed (frontend + `/api/emails/generate`); new mail detected by polling
   `/summary` every 15 s (`all + trash` went up) → "N new emails arrived" + reload (#84)
+- ✅ End to end in Docker with log evidence (6 rounds: delivery, wrong token, inbox down,
+  desktop notification, persistence, CI); "Open the inbox" in a new tab; health pill
+  re-checks every 15 s; architecture docs + ADR 0001 (#85)
+- Decisions: option B (deliver through an API, not a shared database); Generate removed from
+  the inbox; one generator container (deviation from the planned two); duplicated small
+  Claude client instead of a shared library; polling instead of push
+- Known limits / follow-ups: a failed delivery loses the generated emails; polling is slower
+  in background tabs (browser timer throttling); no idempotency for retried deliveries;
+  **next: classify with keyword rules only, no AI in the inbox (#92)**, then Epic 4
 
 ## 13. Roadmap
 

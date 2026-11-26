@@ -69,6 +69,10 @@ describe('generator page', () => {
       'href',
       'http://localhost:8080',
     )
+    // A new tab, so the generator page stays open for the next run (story 3b.6 review)
+    const link = screen.getByRole('link', { name: /open the inbox/i })
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
   })
 
   it('says one email in the singular', async () => {
