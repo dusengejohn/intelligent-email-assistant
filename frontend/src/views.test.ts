@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest'
 import { VIEWS, viewById, viewFromUrl, viewUrl } from './views'
 
 describe('VIEWS', () => {
-  it('lists the eight sidebar views in order', () => {
+  it('lists the nine sidebar views in order, the Plan first', () => {
     expect(VIEWS.map((v) => v.id)).toEqual([
+      'plan',
       'all',
       'unclassified',
       'classified',
@@ -16,12 +17,17 @@ describe('VIEWS', () => {
     ])
   })
 
-  it('gives every view a label, an empty message and a summary count', () => {
-    for (const view of VIEWS) {
+  it('gives every email view a label, an empty message and a summary count', () => {
+    for (const view of VIEWS.filter((v) => v.id !== 'plan')) {
       expect(view.label).not.toBe('')
       expect(view.empty).not.toBe('')
       expect(view.countKey).toBeTruthy()
     }
+  })
+
+  it('gives the Plan view no count; it loads all emails (for the reading pane)', () => {
+    expect(viewById('plan').countKey).toBeUndefined()
+    expect(viewById('plan').filter).toEqual({})
   })
 
   it('maps views to API filters', () => {
@@ -36,6 +42,7 @@ describe('view <-> URL', () => {
   it.each([
     ['?view=critical', 'critical'],
     ['?view=trash', 'trash'],
+    ['?view=plan', 'plan'],
     ['?view=banana', 'all'],
     ['', 'all'],
   ])('reads %j as %s', (search, id) => {

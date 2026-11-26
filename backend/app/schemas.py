@@ -219,6 +219,7 @@ class PlanningResult(BaseModel):
     """Response of GET /api/planning/suggestions: advice only, nothing is booked."""
 
     date: date
+    timezone: str = Field(description="APP_TIMEZONE: show the UTC times in this zone")
     window: PlanWindow | None = Field(description="Working hours still ahead; null if over")
     events: list[CalendarEvent] = Field(description="The day's meetings (read-only)")
     free_slots: list[PlanSlot] = Field(description="Free time before emails were placed")

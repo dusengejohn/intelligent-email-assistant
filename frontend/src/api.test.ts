@@ -7,6 +7,7 @@ import {
   classifyOne,
   deleteEmail,
   emptyTrash,
+  getPlanning,
   getSummary,
   listEmails,
   restoreEmail,
@@ -316,5 +317,27 @@ describe('classifyEmails counts new urgent emails (for alerts)', () => {
 
     expect(totals.critical).toBe(2)
     expect(totals.high).toBe(1)
+  })
+})
+
+describe('getPlanning', () => {
+  it('asks for today without a date, or for the given day', async () => {
+    const mock = fakeFetchSequence(jsonResponse(200, { date: '2026-11-26' }), jsonResponse(200, { date: '2026-11-27' }))
+
+    expect((await getPlanning()).date).toBe('2026-11-26')
+    expect((await getPlanning('2026-11-27')).date).toBe('2026-11-27')
+    expect(mock.mock.calls.map((call) => (call as unknown[])[0])).toEqual([
+      '/api/planning/suggestions',
+      '/api/planning/suggestions?date=2026-11-27',
+    ])
+  })
+
+  it('passes on the 422 for a past day', async () => {
+    fakeFetch(jsonResponse(422, { detail: "Can't plan the past: 2026-11-25 is before today (2026-11-26)" }))
+
+    const err = await apiError(() => getPlanning('2026-11-25'))
+
+    expect(err.status).toBe(422)
+    expect(err.message).toMatch(/plan the past/)
   })
 })

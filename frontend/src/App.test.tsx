@@ -61,6 +61,26 @@ function fakeApi(initial: Email[], classifyAs: Record<number, Email['priority']>
       const target = db.find((e) => e.id === id)
       if (path === '/api/health') return json({ status: 'ok' })
       if (path === '/api/emails/summary') return json(summary())
+      if (path.startsWith('/api/planning/suggestions')) {
+        // One 15-minute block per open, classified email, from 09:00 Toronto
+        const open = active().filter((e) => e.priority && e.status === 'new')
+        const at = (minutes: number) => new Date(Date.UTC(2026, 10, 26, 14, minutes)).toISOString()
+        return json({
+          date: '2026-11-26',
+          timezone: 'America/Toronto',
+          window: { start: at(0), end: at(480) },
+          events: [],
+          free_slots: [],
+          suggestions: open.map((e, i) => ({
+            start: at(i * 15),
+            end: at(i * 15 + 15),
+            priority: e.priority,
+            emails: [{ id: e.id, subject: e.subject, priority: e.priority, minutes: 15 }],
+          })),
+          not_today: [],
+          unclassified: active().filter((e) => !e.priority).length,
+        })
+      }
       if (method === 'POST' && path === '/api/emails/classify') {
         // Classify every unclassified email as `classifyAs` says (default: low)
         const done = active().filter((e) => !e.priority)
@@ -464,5 +484,54 @@ describe('App: new mail arrives from the generator (polling)', () => {
     await nextPoll()
 
     expect(summaryCalls(requests)).toBe(before)
+  })
+})
+
+describe('App: the Plan view (story 4.5)', () => {
+  it('opens from the URL, instead of the email list', async () => {
+    window.history.replaceState(null, '', '/?view=plan')
+    fakeApi([email(1, 'Outage', 'critical'), email(2, 'Lunch', null)])
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Plan for Thursday, November 26' })).toBeInTheDocument()
+    const views = screen.getByRole('navigation', { name: 'Views' })
+    expect(within(views).getByRole('button', { name: /Plan/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByRole('list', { name: 'Emails' })).not.toBeInTheDocument()
+    expect(await screen.findByText(/1 critical email planned from 09:00 to 09:15/)).toBeInTheDocument()
+    expect(screen.getByText(/1 unclassified \(Classify first\)/)).toBeInTheDocument()
+  })
+
+  it('opens a planned email in the reading pane; handled removes it from the plan', async () => {
+    window.history.replaceState(null, '', '/?view=plan')
+    const { requests } = fakeApi([email(1, 'Outage', 'critical'), email(2, 'Review', 'high')])
+    render(<App />)
+    const planCalls = () => requests.filter((r) => r.startsWith('/api/planning/suggestions')).length
+
+    await userEvent.click(await screen.findByRole('button', { name: /Outage · 15 min/ }))
+
+    const pane = screen.getByRole('region', { name: 'Reading pane' })
+    expect(within(pane).getByRole('heading', { name: 'Outage' })).toBeInTheDocument()
+    const before = planCalls()
+    await userEvent.click(within(pane).getByRole('button', { name: 'Mark handled' }))
+
+    await waitFor(() => expect(planCalls()).toBeGreaterThan(before))
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /Outage · 15 min/ })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('button', { name: /Review · 15 min/ })).toBeInTheDocument()
+  })
+
+  it('switches from the Plan to a list view and back', async () => {
+    fakeApi([email(1, 'Outage', 'critical')])
+    render(<App />)
+    const views = await screen.findByRole('navigation', { name: 'Views' })
+
+    await userEvent.click(within(views).getByRole('button', { name: /Plan/ }))
+    expect(await screen.findByRole('heading', { name: /Plan for/ })).toBeInTheDocument()
+    expect(window.location.search).toBe('?view=plan')
+
+    await userEvent.click(within(views).getByRole('button', { name: /All/ }))
+    expect(await screen.findByRole('list', { name: 'Emails' })).toBeInTheDocument()
   })
 })

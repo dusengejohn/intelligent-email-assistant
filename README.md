@@ -144,7 +144,14 @@ Open emails (not handled, not in the Trash) are placed in priority order, oldest
 priority; each gets the earliest free time it fits into (an urgent email that is too long for
 an early gap leaves that gap to a shorter, less urgent one). Low emails are **batched** into one
 block at the end of the day. What doesn't fit is listed in `not_today`; unclassified emails are
-only counted ("classify first"). Nothing is booked or changed. A Plan view follows in story 4.5.
+only counted ("classify first"). Nothing is booked or changed.
+
+**The Plan view** (sidebar → **📅 Plan**, `/?view=plan`): the day as a timeline from work start to
+end, with your meetings in grey and the suggested reply blocks in their priority color (subject
+and minutes), plus a one-line summary built by code, e.g. *"12 critical emails planned from
+09:00 to 16:30; 207 don't fit today."* Use **‹ Today ›** to look at other days (not the past).
+Click an email to open it in the reading pane; mark it handled and it leaves the plan. Times are
+shown in `APP_TIMEZONE`, whatever zone your computer is in.
 
 ```bash
 curl localhost:8080/api/planning/suggestions                  # today

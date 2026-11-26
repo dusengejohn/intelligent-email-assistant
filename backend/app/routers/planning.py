@@ -91,6 +91,7 @@ def planning_suggestions(
 
     return PlanningResult(
         date=day,
+        timezone=settings.app_timezone,
         window=PlanWindow(start=window[0], end=window[1]) if window else None,
         events=events,
         free_slots=[PlanSlot(start=s.start, end=s.end, minutes=s.minutes) for s in slots],
