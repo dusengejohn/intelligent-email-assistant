@@ -1,0 +1,10 @@
+# Keep the build context small and the image free of local/dev files
+.venv/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+tests/
+web/node_modules/
+web/dist/
+static/
+.env

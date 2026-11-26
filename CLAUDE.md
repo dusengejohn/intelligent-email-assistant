@@ -24,6 +24,10 @@ Guidance for Claude Code when working in this repository.
   `/api/emails/ingest` with `X-Ingest-Token`; the only caller of the inbox). No database.
   Emails may be at most 47 h old (inbox: 48 h) so they're still valid on delivery.
   Tests: `tests/fakes.py` has `FakeAI` and `FakeInbox` (`httpx.MockTransport`), no network.
+  `generator/web/` is its page (React + Vite + TS + Tailwind, Vitest; same setup as `frontend/`);
+  `app/main.py` `create_app()` serves the built page from `static/` at `/` when it exists (Docker),
+  after `/api` (unknown `/api/...` = JSON 404). `generator/Dockerfile` is multi-stage (Node builds
+  the page, Python serves page + API), non-root. `VITE_INBOX_URL` (build time) = the inbox link.
 - `frontend/` — React + Vite + TypeScript + Tailwind, served by nginx in Docker; `/api/` is
   proxied to the backend (by Vite in dev, by nginx in Docker). `src/api.ts` is the typed
   API client (Vitest: `src/api.test.ts`); UI pieces live in `src/components/`. Component tests
@@ -55,6 +59,8 @@ Guidance for Claude Code when working in this repository.
 - Same as `backend/`: `uv sync`, `uv run pytest`, `uv run ruff check .`, `uv run ruff format .`
 - Dev server: `uv run uvicorn app.main:app --reload --port 8001` (delivers to `INBOX_URL`,
   default `http://localhost:8000`; needs `INGEST_TOKEN` and `ANTHROPIC_API_KEY`)
+- Page (from `generator/web/`): `npm install`, `npm run dev` (:5174, proxies `/api` → :8001),
+  `npm run lint`, `npm test`, `npm run build`
 
 ## Commands (run from `frontend/`)
 - Install deps: `npm install` (CI uses `npm ci`)
