@@ -1,40 +1,51 @@
-"""Tests for the strict GeneratedEmail rules (story 1.4, issue #30)."""
+"""Tests for the IncomingEmail rules (story 1.4; renamed in story 3b.5).
+
+Every email the inbox saves must pass them. They arrive through the ingest API
+(tests/routers/test_emails_ingest.py tests that endpoint end to end).
+"""
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 from pydantic import ValidationError
 
-from app.schemas import GeneratedEmail, RawEmail
+from app.schemas import IncomingEmail
 
 
-def raw(**overrides: Any) -> RawEmail:
+def incoming(**overrides: Any) -> dict[str, Any]:
     values: dict[str, Any] = {
         "sender_name": "Maria Chen",
         "sender_email": "maria.chen@example.com",
         "subject": "Database migration tonight",
         "body": "Hi team, the migration starts at 22:00. Please confirm. Maria",
-        "received_minutes_ago": 90,
+        "received_at": datetime.now(UTC) - timedelta(minutes=90),
     }
     values.update(overrides)
-    return RawEmail(**values)
+    return values
 
 
-def test_valid_email_gets_utc_received_at_from_minutes_ago() -> None:
-    now = datetime.now(UTC)
+def test_valid_email_keeps_a_utc_received_at() -> None:
+    sent = datetime.now(UTC) - timedelta(minutes=90)
 
-    email = GeneratedEmail.from_raw(raw(received_minutes_ago=90), now)
+    email = IncomingEmail.model_validate(incoming(received_at=sent))
 
-    assert email.received_at == now - timedelta(minutes=90)
+    assert email.received_at == sent
     assert email.received_at.tzinfo == UTC
-    assert email.sender_email == "maria.chen@example.com"
+
+
+def test_other_timezones_are_converted_to_utc() -> None:
+    toronto = datetime.now(UTC).astimezone(ZoneInfo("America/Toronto"))
+
+    email = IncomingEmail.model_validate(incoming(received_at=toronto))
+
+    assert email.received_at.tzinfo == UTC
+    assert email.received_at == toronto
 
 
 def test_text_fields_are_trimmed() -> None:
-    email = GeneratedEmail.from_raw(
-        raw(sender_name="  Maria Chen ", subject=" Hello  "), datetime.now(UTC)
-    )
+    email = IncomingEmail.model_validate(incoming(sender_name="  Maria Chen ", subject=" Hello  "))
 
     assert email.sender_name == "Maria Chen"
     assert email.subject == "Hello"
@@ -42,7 +53,11 @@ def test_text_fields_are_trimmed() -> None:
 
 @pytest.mark.parametrize("address", ["ops@example.com", "alerts@it.example.org", "ceo@EXAMPLE.NET"])
 def test_fictional_domains_are_accepted(address: str) -> None:
-    assert GeneratedEmail.from_raw(raw(sender_email=address), datetime.now(UTC))
+    assert IncomingEmail.model_validate(incoming(sender_email=address))
+
+
+def _hours_ago(hours: float) -> datetime:
+    return datetime.now(UTC) - timedelta(hours=hours)
 
 
 @pytest.mark.parametrize(
@@ -58,15 +73,16 @@ def test_fictional_domains_are_accepted(address: str) -> None:
         ("sender_email", "bob@acme.test"),  # special-use domain: rejected by EmailStr
         ("sender_email", "john@gmail.com"),  # real-looking domain: not fictional
         ("sender_email", "x@notexample.com"),  # suffix trick: not a subdomain of example.com
-        ("received_minutes_ago", -1),  # in the future
-        ("received_minutes_ago", 2881),  # older than 48 h
+        ("received_at", _hours_ago(-0.1)),  # in the future
+        ("received_at", _hours_ago(48.1)),  # older than 48 h
+        ("received_at", datetime(2026, 11, 25, 10, 0)),  # naive: no timezone
     ],
 )
 def test_invalid_values_are_rejected(field: str, bad_value: Any) -> None:
     with pytest.raises(ValidationError):
-        GeneratedEmail.from_raw(raw(**{field: bad_value}), datetime.now(UTC))
+        IncomingEmail.model_validate(incoming(**{field: bad_value}))
 
 
-@pytest.mark.parametrize("minutes", [0, 2880])
-def test_window_boundaries_are_accepted(minutes: int) -> None:
-    assert GeneratedEmail.from_raw(raw(received_minutes_ago=minutes), datetime.now(UTC))
+@pytest.mark.parametrize("hours", [0, 47.99])
+def test_window_boundaries_are_accepted(hours: float) -> None:
+    assert IncomingEmail.model_validate(incoming(received_at=_hours_ago(hours)))

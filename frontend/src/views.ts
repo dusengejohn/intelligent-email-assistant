@@ -23,7 +23,7 @@ export interface View {
 }
 
 export const VIEWS: View[] = [
-  { id: 'all', label: 'All', filter: {}, countKey: 'all', empty: 'No emails yet. Click Generate to create some.' },
+  { id: 'all', label: 'All', filter: {}, countKey: 'all', empty: 'No emails yet. New ones come from the Email Generator.' },
   { id: 'unclassified', label: 'Unclassified', filter: { classified: false }, countKey: 'unclassified', empty: 'Nothing to classify.' },
   { id: 'classified', label: 'Classified', filter: { classified: true }, countKey: 'classified', empty: 'No classified emails yet. Click Classify.' },
   { id: 'critical', label: PRIORITIES.critical.label, filter: { priority: 'critical' }, countKey: 'critical', empty: 'No critical emails.', color: PRIORITIES.critical.color },

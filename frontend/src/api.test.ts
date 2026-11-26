@@ -7,7 +7,6 @@ import {
   classifyOne,
   deleteEmail,
   emptyTrash,
-  generateEmails,
   getSummary,
   listEmails,
   restoreEmail,
@@ -75,36 +74,15 @@ describe('listEmails', () => {
   })
 })
 
-describe('generateEmails', () => {
-  it('POSTs count and scenario as JSON', async () => {
-    const mock = fakeFetch(jsonResponse(201, [EMAIL]))
-
-    const emails = await generateEmails(10, 'IT team')
-
-    expect(emails).toEqual([EMAIL])
-    expect(mock).toHaveBeenCalledWith('/api/emails/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ count: 10, scenario: 'IT team' }),
-    })
-  })
-
-  it.each([undefined, '', '   '])('leaves out an empty scenario (%j)', async (scenario) => {
-    const mock = fakeFetch(jsonResponse(201, []))
-
-    await generateEmails(5, scenario)
-
-    const init = mock.mock.calls[0] as unknown as [string, RequestInit]
-    expect(JSON.parse(init[1].body as string)).toEqual({ count: 5 })
-  })
-
+// Error handling is shared by every call (request()); shown here with a few of them
+describe('errors', () => {
   it.each([
     [503, 'AI is not configured: set ANTHROPIC_API_KEY in .env'],
     [502, 'AI service error: request timed out; try again.'],
   ])('turns HTTP %i into an ApiError with the backend detail', async (status, detail) => {
     fakeFetch(jsonResponse(status, { detail }))
 
-    const err = await apiError(() => generateEmails(10))
+    const err = await apiError(() => classifyOne(1))
 
     expect(err.status).toBe(status)
     expect(err.message).toBe(detail)
@@ -115,25 +93,25 @@ describe('generateEmails', () => {
       jsonResponse(422, {
         detail: [
           {
-            type: 'less_than_equal',
-            loc: ['body', 'count'],
-            msg: 'Input should be less than or equal to 50',
-            input: 51,
+            type: 'enum',
+            loc: ['body', 'priority'],
+            msg: 'Input should be critical, high, moderate or low',
+            input: 'urgent',
           },
         ],
       }),
     )
 
-    const err = await apiError(() => generateEmails(51))
+    const err = await apiError(() => updateEmail(1, { priority: 'high' }))
 
     expect(err.status).toBe(422)
-    expect(err.message).toBe('count: Input should be less than or equal to 50')
+    expect(err.message).toBe('priority: Input should be critical, high, moderate or low')
   })
 
   it('explains a gateway timeout (non-JSON body from nginx)', async () => {
     fakeFetch(new Response('<html>504 Gateway Time-out</html>', { status: 504 }))
 
-    const err = await apiError(() => generateEmails(50))
+    const err = await apiError(() => classifyOne(1))
 
     expect(err.status).toBe(504)
     expect(err.message).toMatch(/took too long.*HTTP 504/)
@@ -142,7 +120,7 @@ describe('generateEmails', () => {
   it('gives a generic message for other non-JSON errors', async () => {
     fakeFetch(new Response('oops', { status: 500 }))
 
-    const err = await apiError(() => generateEmails(1))
+    const err = await apiError(() => getSummary())
 
     expect(err.message).toBe('Request failed (HTTP 500)')
   })

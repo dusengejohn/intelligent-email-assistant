@@ -9,7 +9,7 @@ Guidance for Claude Code when working in this repository.
     (brief §7 as code: the single source for priority meanings, colors, default minutes);
   - `app/routers/` — endpoints (`health.py`, `emails.py`);
   - `app/services/` — `ai_client.py` (the only Claude caller), `prompts.py`,
-    `generator.py`, `classifier.py` (AI in batches + per-email fallback),
+    `classifier.py` (AI in batches + per-email fallback),
     `fallback.py` (rule-based classifier, no AI), `errors.py`;
   - `migrations/` + `alembic.ini` — Alembic database migrations, applied at startup by
     `app/db.py` `migrate_database()` (existing pre-Alembic databases are stamped at `0001`);
@@ -88,7 +88,11 @@ Guidance for Claude Code when working in this repository.
   one, which drops POST/PATCH/DELETE) and confirm each step in the nginx log
   (`docker compose logs frontend`, user agent shows the browser); prefer `--tail` over `--since`.
 - AI features **with** a fallback depend on `get_optional_ai_client` (no key → `None` → fallback,
-  HTTP 200); features **without** one depend on `get_ai_client` (no key → HTTP 503).
+  HTTP 200). The inbox has no AI feature **without** a fallback since Generate moved to
+  `generator/` (3b.5); a new one (e.g. Epic 5) needs a strict dependency again (no key → 503).
+- **The inbox never generates:** emails arrive via `POST /api/emails/ingest` (validated with
+  `IncomingEmail`). The page notices them by polling `/summary` (`src/arrivals.ts`: new mail =
+  `all + trash` went up; deletes/restores don't count).
 
 ## Automation
 - PostToolUse hooks auto-fix every file you edit: `ruff_after_edit.py` (backend

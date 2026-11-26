@@ -223,3 +223,20 @@ def test_unknown_top_level_field_is_rejected(client: TestClient) -> None:
     response = client.post(URL, json=payload, headers=HEADERS)
 
     assert response.status_code == 422
+
+
+# --- Generating moved to the generator service (story 3b.5) -------------------------
+
+
+def test_the_inbox_no_longer_generates(client: TestClient) -> None:
+    # The path matches GET /api/emails/{id} only: POST is "method not allowed"
+    response = client.post("/api/emails/generate", json={"count": 1})
+
+    assert response.status_code == 405
+
+
+def test_ingest_is_documented_and_generate_is_gone(client: TestClient) -> None:
+    paths = client.get("/openapi.json").json()["paths"]
+
+    assert "post" in paths["/api/emails/ingest"]
+    assert "/api/emails/generate" not in paths

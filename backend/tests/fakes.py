@@ -10,25 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.schemas import ClassificationBatch, GeneratedBatch, RawClassification, RawEmail
-
-
-def raw(n: int, **overrides: Any) -> RawEmail:
-    """One valid AI email; override fields to make it invalid."""
-    values: dict[str, Any] = {
-        "sender_name": f"Sender {n}",
-        "sender_email": f"sender{n}@example.com",
-        "subject": f"Subject {n}",
-        "body": f"Body of email {n}. SECRET-BODY-TEXT",
-        "received_minutes_ago": n * 60,
-    }
-    values.update(overrides)
-    return RawEmail(**values)
-
-
-def batch(size: int, start: int = 0) -> GeneratedBatch:
-    """A batch of `size` valid AI emails."""
-    return GeneratedBatch(emails=[raw(start + i) for i in range(size)])
+from app.schemas import ClassificationBatch, RawClassification
 
 
 class FakeAI:

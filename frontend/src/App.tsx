@@ -5,7 +5,6 @@ import {
   classifyOne,
   deleteEmail,
   emptyTrash,
-  generateEmails,
   getSummary,
   listEmails,
   restoreEmail,
@@ -15,6 +14,7 @@ import {
   type Priority,
 } from './api'
 import { alertMessage, alertView } from './alerts'
+import { arrivalMessage, arrived, POLL_INTERVAL_MS } from './arrivals'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { EmailList } from './components/EmailList'
 import { ErrorBanner } from './components/ErrorBanner'
@@ -45,7 +45,6 @@ function App() {
   const [summary, setSummary] = useState<EmailSummary | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null) // email in the reading pane
   const [loadingList, setLoadingList] = useState(true)
-  const [generating, setGenerating] = useState(false)
   const [classifying, setClassifying] = useState(false)
   const [busy, setBusy] = useState(false) // a reading-pane action is running
   const [progress, setProgress] = useState(0) // emails classified so far in this click
@@ -56,6 +55,26 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   // The ids of the list as last shown, to find "the next email" after one leaves
   const shownIds = useRef<number[]>([])
+  // The counts last seen, to notice mail that arrived since (story 3b.5)
+  const lastSummary = useRef<EmailSummary | null>(null)
+
+  /**
+   * Every new set of counts (page load, reload or poll) goes through here. If mail
+   * arrived, reload the list and say so. useCallback with no dependencies: it only
+   * uses a ref and state setters, so it is the same function on every render and
+   * the polling timer below never holds an outdated copy.
+   */
+  const receivedSummary = useCallback((counts: EmailSummary) => {
+    const count = arrived(lastSummary.current, counts)
+    lastSummary.current = counts
+    setSummary(counts)
+    if (count === 0) return
+    const message = arrivalMessage(count)
+    setReloadKey((key) => key + 1) // the new emails: reload list + counts
+    setNotice(message) // the status line always says it...
+    setToast((showing) => showing ?? { message }) // ...the toast only if none is up (e.g. Undo)
+    notify('New email', message, () => window.focus())
+  }, [])
 
   const current = viewById(view)
   const inTrash = view === 'trash'
@@ -83,7 +102,7 @@ function App() {
         })
         shownIds.current = ids
         setEmails(list)
-        setSummary(counts)
+        receivedSummary(counts)
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(messageOf(err))
@@ -94,7 +113,21 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [view, reloadKey])
+  }, [view, reloadKey, receivedSummary])
+
+  // New mail: every POLL_INTERVAL_MS ask for the counts (cheap, no AI). If mail
+  // arrived, receivedSummary() reloads the list. The cleanup stops the timer when
+  // the page goes away, so no timer keeps running in the background.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      getSummary()
+        .then(receivedSummary)
+        .catch(() => {
+          // Quiet: the health pill shows an outage; the next poll tries again
+        })
+    }, POLL_INTERVAL_MS)
+    return () => window.clearInterval(timer)
+  }, [receivedSummary])
 
   // Browser Back/Forward: the URL changed, so follow it
   useEffect(() => {
@@ -133,20 +166,6 @@ function App() {
     } finally {
       setBusy(false)
       reload() // list + counts: the email may have moved or left the view
-    }
-  }
-
-  async function handleGenerate(count: number, scenario: string) {
-    setGenerating(true)
-    setError(null)
-    setNotice(null)
-    try {
-      await generateEmails(count, scenario)
-      reload() // new emails: refresh the list and the counts
-    } catch (err) {
-      setError(messageOf(err)) // the existing list stays as it was
-    } finally {
-      setGenerating(false)
     }
   }
 
@@ -213,11 +232,9 @@ function App() {
   }
 
   // Status line under the toolbar: progress, result of the last action, or a hint
-  const statusText = generating
-    ? 'Claude is writing your emails. This can take 15 seconds or more…'
-    : classifying
-      ? `Classifying… ${progress} of ${target}`
-      : (notice ?? `${unclassified} unclassified`)
+  const statusText = classifying
+    ? `Classifying… ${progress} of ${target}`
+    : (notice ?? `${unclassified} unclassified`)
 
   // App shell: the page itself never scrolls (h-screen); only the list and the
   // pane do. min-h-0 / min-w-0 let flex children shrink so overflow-y-auto works.
@@ -225,13 +242,7 @@ function App() {
   // the list while an email is open ("Back to list").
   return (
     <div className="flex h-screen flex-col bg-gray-50">
-      <Toolbar
-        generating={generating}
-        classifying={classifying}
-        loadingList={loadingList}
-        onGenerate={handleGenerate}
-        onClassify={handleClassify}
-      />
+      <Toolbar classifying={classifying} loadingList={loadingList} onClassify={handleClassify} />
       <p className="border-b border-gray-200 bg-white px-4 py-1 text-xs text-gray-600" role="status">
         {statusText}
       </p>
