@@ -64,6 +64,9 @@ Guidance for Claude Code when working in this repository.
   tests pass a fake SDK client (`sdk_client=`) and never use the network or a real key.
 - **Soft delete:** trashed emails (`deleted_at` set) must stay invisible. New queries in
   `routers/emails.py` filter with `_active()`; single-email actions use `_get_or_404()`.
+- **Manual browser checks:** use a normal browser (Firefox/Edge/Chrome, not VS Code's built-in
+  one, which drops POST/PATCH/DELETE) and confirm each step in the nginx log
+  (`docker compose logs frontend`, user agent shows the browser); prefer `--tail` over `--since`.
 - AI features **with** a fallback depend on `get_optional_ai_client` (no key → `None` → fallback,
   HTTP 200); features **without** one depend on `get_ai_client` (no key → HTTP 503).
 
