@@ -1,13 +1,15 @@
 """Email endpoints: /api/emails/..."""
 
 import logging
+import secrets
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import ColumnElement, case, delete
 from sqlmodel import Session, col, func, select
 
+from app.config import Settings, get_settings
 from app.db import get_session
 from app.models import ClassificationSource, Email, EmailStatus, Priority
 from app.priorities import default_minutes
@@ -19,6 +21,8 @@ from app.schemas import (
     EmailUpdate,
     EmptyTrashResult,
     GenerateRequest,
+    IngestRequest,
+    IngestResult,
     SortOrder,
     SourceCounts,
 )
@@ -38,6 +42,54 @@ OptionalAIDep = Annotated[AIClient | None, Depends(get_optional_ai_client)]
 # every request far below nginx's 180 s timeout. The client calls again while
 # `remaining` > 0.
 CLASSIFY_LIMIT = 50
+
+
+def require_ingest_token(
+    settings: Annotated[Settings, Depends(get_settings)],
+    token: Annotated[str | None, Header(alias="X-Ingest-Token")] = None,
+) -> None:
+    """Let a request through only if it carries the shared ingest token.
+
+    FastAPI runs dependencies before it validates the body, so a caller without
+    the token gets 401 and learns nothing about our validation rules.
+    """
+    if settings.ingest_token is None:
+        # Fail loudly: a forgotten setting must never mean "accept anything"
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Ingest is disabled: set INGEST_TOKEN in .env",
+        )
+    expected = settings.ingest_token.get_secret_value().encode()
+    # compare_digest takes the same time however many characters match, so the
+    # token can't be guessed character by character from response times
+    if token is None or not secrets.compare_digest(token.encode(), expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or wrong X-Ingest-Token header",
+        )
+
+
+@router.post(
+    "/ingest",
+    response_model=IngestResult,
+    status_code=status.HTTP_201_CREATED,
+    summary="Receive emails delivered by another service (e.g. the generator)",
+    dependencies=[Depends(require_ingest_token)],
+    responses={
+        401: {"description": "Missing or wrong X-Ingest-Token header"},
+        422: {"description": "An email broke a rule: nothing was saved"},
+        503: {"description": "Ingest is disabled (INGEST_TOKEN not configured)"},
+    },
+)
+def ingest(request: IngestRequest, session: SessionDep) -> IngestResult:
+    # Every email already passed validation (IngestEmail), so save them all in
+    # one transaction: either all arrive or none do
+    emails = [Email(**item.model_dump()) for item in request.emails]
+    session.add_all(emails)
+    session.commit()
+    ids = [email.id for email in emails if email.id is not None]
+    logger.info("Ingested %d emails (ids %s..%s)", len(ids), ids[0], ids[-1])
+    return IngestResult(created=len(ids), ids=ids)
 
 
 # A plain `def` (not `async def`): the Claude call blocks for several seconds,

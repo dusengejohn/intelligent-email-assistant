@@ -32,9 +32,13 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-haiku-5-5"
     ai_timeout_seconds: int = Field(default=30, gt=0)
 
-    @field_validator("anthropic_api_key", mode="before")
+    # Shared secret that other services (the generator) send in the
+    # X-Ingest-Token header to deliver emails. Not set = ingest disabled (503).
+    ingest_token: SecretStr | None = None
+
+    @field_validator("anthropic_api_key", "ingest_token", mode="before")
     @classmethod
-    def blank_key_means_not_configured(cls, value: object) -> object:
+    def blank_secret_means_not_configured(cls, value: object) -> object:
         # `ANTHROPIC_API_KEY=` (copied from .env.example) arrives as "" — treat as missing
         if isinstance(value, str) and not value.strip():
             return None

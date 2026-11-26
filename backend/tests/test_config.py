@@ -112,3 +112,24 @@ def test_get_settings_is_cached_until_cleared() -> None:
 
     get_settings.cache_clear()
     assert get_settings() is not first
+
+
+def test_ingest_token_is_optional_and_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert get_settings().ingest_token is None
+
+    monkeypatch.setenv("INGEST_TOKEN", "s3cret-token")
+    get_settings.cache_clear()
+    settings = get_settings()
+
+    assert settings.ingest_token is not None
+    assert settings.ingest_token.get_secret_value() == "s3cret-token"
+    assert "s3cret-token" not in repr(settings)  # SecretStr hides it
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_blank_ingest_token_means_ingest_disabled(
+    monkeypatch: pytest.MonkeyPatch, blank: str
+) -> None:
+    monkeypatch.setenv("INGEST_TOKEN", blank)
+
+    assert get_settings().ingest_token is None

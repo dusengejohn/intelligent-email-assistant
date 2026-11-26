@@ -91,6 +91,7 @@ backend/tests/       # mirrors services/ and routers/
 | `ANTHROPIC_API_KEY` | *(secret)* | Optional at startup; empty = not configured; AI features return a clear error / fallback if missing |
 | `ANTHROPIC_MODEL` | `claude-haiku-5-5` | Cheap + fast is enough; verify current model names in Anthropic docs |
 | `AI_TIMEOUT_SECONDS` | `30` | Max seconds per Claude API call |
+| `INGEST_TOKEN` | *(secret)* | Shared secret for `POST /api/emails/ingest` (header `X-Ingest-Token`); empty = ingest disabled (503). Epic 3b |
 | `APP_TIMEZONE` | `America/Toronto` | Used by calendar planning |
 | `WORK_HOURS` | `09:00-17:00` | Working window for suggestions |
 | `WEATHER_CITY` | `Toronto` | |
@@ -167,6 +168,17 @@ unclassified emails first within each group.
 - Added in the story review (#4): Outlook/Gmail-style inbox (one line per email, scrolling
   list, sticky column header), views with counts incl. Trash, reading pane, soft delete with
   Undo / Restore / Empty trash, database migrations (Alembic).
+
+### Epic 3b — Separate email generator service (#79)
+- Coach's advice (2026-11-26): keep generating mail apart from reading it, like a mail
+  server and a mail client. Option B: a separate **generator** service delivers emails to
+  the inbox through an API (not a shared database).
+- Inbox: `POST /api/emails/ingest` (1–50 emails, shared token `X-Ingest-Token`,
+  validated again, all-or-nothing) (#80).
+- Generator: own `generator/` project and container (:8081) with its own Claude client and a
+  simple "search engine" page; generates, then delivers to the inbox (#81–#83).
+- Inbox: Generate removed; new mail detected by polling `/summary` every 15 s with a
+  "N new emails arrived" toast (#84). End to end + docs + decision record (#85).
 
 ### Epic 4 — Calendar-based response planning (advice only)
 - `GET /api/calendar/events?date=YYYY-MM-DD` (mock source first; Google Calendar / Microsoft Graph later).
@@ -295,6 +307,9 @@ unclassified emails first within each group.
   Docker Desktop's engine can stay stopped after a reboot (restart it); a dashboard page with
   counts, brief and widgets is noted for Epic 5 (#6)
 
+**Epic 3b — Separate email generator service: in progress** (#79, stories #80–#85)
+- ⏳ Inbox ingest API with a shared token (#80)
+
 ## 13. Roadmap
 
 | Iteration | Scope |
@@ -302,7 +317,7 @@ unclassified emails first within each group.
 | 1 | Finish Epic 0 |
 | 2 | Epic 1 — generation + DB |
 | 3 | Epic 2 — classification + fallback; Epic 3 basic dashboard |
-| 4 | Epic 3 notifications/filters; Epic 4 with mock calendar |
+| 4 | Epic 3 notifications/filters; **Epic 3b separate generator service**; Epic 4 with mock calendar |
 | 5 | Epic 5 widgets + daily brief; optional real calendar integration |
 | 6 | Epic 6 release pipeline + cloud deployment; polish docs |
 
